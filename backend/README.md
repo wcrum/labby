@@ -34,9 +34,8 @@ The Palette Project service provides access to Spectro Cloud control plane funct
 5. Deletes registration tokens for the project
 6. Deletes the project itself
 
-**Required Environment Variables:**
-- `PALETTE_HOST`: The URL of your Palette instance
-- `PALETTE_API_KEY`: API key with tenant-level access
+**Configuration:**
+- Palette connection details are configured in lab templates (YAML files)
 - `PALETTE_PROJECT_UID`: (Optional) Specific project UID for scoped access
 
 ## API Endpoints
@@ -65,8 +64,9 @@ The Palette Project service provides access to Spectro Cloud control plane funct
 ## Setup
 
 1. Copy `env.example` to `.env` and configure your environment variables
-2. Run `go mod tidy` to install dependencies
-3. Run `go run cmd/server/main.go` to start the server
+2. Create lab templates in the `templates/` directory (see `templates/primary-lab.yaml` for an example)
+3. Run `go mod tidy` to install dependencies
+4. Run `go run cmd/server/main.go` to start the server
 
 ## Architecture
 

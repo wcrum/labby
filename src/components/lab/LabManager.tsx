@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { apiService, LabResponse } from "@/lib/api";
-import { LabStarter } from "./LabStarter";
+
 import { LabSessionContent } from "./LabSessionContent";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw, FlaskConical } from "lucide-react";
 
 export function LabManager() {
   const [labs, setLabs] = useState<LabResponse[]>([]);
@@ -35,14 +35,11 @@ export function LabManager() {
     fetchLabs();
   }, []);
 
-  const handleLabCreated = () => {
-    // Refresh the labs list after creation
-    fetchLabs();
-  };
+
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center h-64">
         <div className="flex items-center space-x-2">
           <Loader2 className="h-6 w-6 animate-spin" />
           <span>Loading your lab sessions...</span>
@@ -53,7 +50,7 @@ export function LabManager() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -75,9 +72,31 @@ export function LabManager() {
     );
   }
 
-  // If user has no labs, show the lab starter
+  // If user has no labs, show message to create from template
   if (labs.length === 0) {
-    return <LabStarter onLabCreated={handleLabCreated} />;
+    return (
+      <div className="flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FlaskConical className="h-5 w-5" />
+              No Lab Sessions
+            </CardTitle>
+            <CardDescription>
+              You don&apos;t have any active lab sessions. Start a new lab from available templates.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Button asChild className="w-full">
+              <a href="/labs">
+                <FlaskConical className="mr-2 h-4 w-4" />
+                Browse Available Labs
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   // If user has exactly one lab, show it
@@ -89,7 +108,7 @@ export function LabManager() {
   // If user has multiple labs (shouldn't happen with single lab policy)
   // Show a warning and let them choose
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

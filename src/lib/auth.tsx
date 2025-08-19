@@ -21,13 +21,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Check if user is already logged in on mount
     const token = apiService.getToken();
     if (token) {
-      // In a real app, you'd validate the token with the backend
-      // For now, we'll just check if it exists
-      setIsLoading(false);
+      // Validate the token and restore user data
+      restoreUserSession();
     } else {
       setIsLoading(false);
     }
   }, []);
+
+  const restoreUserSession = async () => {
+    try {
+      const userData = await apiService.getCurrentUser();
+      setUser(userData);
+    } catch (error) {
+      console.error('Failed to restore user session:', error);
+      // Token is invalid, clear it
+      apiService.clearToken();
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const login = async (email: string) => {
     try {

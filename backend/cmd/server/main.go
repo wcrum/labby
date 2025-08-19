@@ -28,6 +28,12 @@ func main() {
 	// Initialize services
 	authService := auth.NewService(jwtSecret)
 	labService := lab.NewService()
+
+	// Load lab templates
+	if err := labService.LoadTemplates("./templates"); err != nil {
+		log.Printf("Warning: Failed to load templates: %v", err)
+	}
+
 	handler := handlers.NewHandler(authService, labService)
 
 	// Create a default admin user for testing
@@ -101,12 +107,21 @@ func main() {
 	protected := router.Group("/api")
 	protected.Use(handler.AuthMiddleware())
 	{
+		// Auth routes
+		protected.GET("/auth/me", handler.GetCurrentUser)
+
 		// Lab routes
 		protected.POST("/labs", handler.CreateLab)
 		protected.GET("/labs", handler.GetUserLabs)
 		protected.GET("/labs/:id", handler.GetLab)
+		protected.GET("/labs/:id/progress", handler.GetLabProgress)
 		protected.DELETE("/labs/:id", handler.DeleteLab)
 		protected.POST("/labs/:id/stop", handler.StopLab)
+
+		// Template routes
+		protected.GET("/templates", handler.GetLabTemplates)
+		protected.GET("/templates/:id", handler.GetLabTemplate)
+		protected.POST("/templates/:id/labs", handler.CreateLabFromTemplate)
 	}
 
 	// Admin routes (require both auth and admin privileges)

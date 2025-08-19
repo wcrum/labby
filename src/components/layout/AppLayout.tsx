@@ -41,6 +41,13 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                 {/* Main navigation links */}
                 <div className="flex items-center space-x-4">
                   <Button variant="ghost" asChild>
+                    <Link href="/labs" className="flex items-center gap-2">
+                      <FlaskConical className="h-4 w-4" />
+                      Available Labs
+                    </Link>
+                  </Button>
+                  
+                  <Button variant="ghost" asChild>
                     <Link href="/" className="flex items-center gap-2">
                       <FlaskConical className="h-4 w-4" />
                       My Labs

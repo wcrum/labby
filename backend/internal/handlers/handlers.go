@@ -103,11 +103,63 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-// CreateLab handles lab creation
-func (h *Handler) CreateLab(c *gin.Context) {
-	var req models.CreateLabRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// GetCurrentUser returns the current authenticated user
+func (h *Handler) GetCurrentUser(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	c.JSON(http.StatusOK, *userObj)
+}
+
+// GetLabProgress returns the progress for a lab
+func (h *Handler) GetLabProgress(c *gin.Context) {
+	labID := c.Param("id")
+	if labID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID required"})
+		return
+	}
+
+	progress := h.labService.GetProgress(labID)
+	if progress == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Progress not found for lab"})
+		return
+	}
+
+	c.JSON(http.StatusOK, progress)
+}
+
+// GetLabTemplates returns all available lab templates
+func (h *Handler) GetLabTemplates(c *gin.Context) {
+	templates := h.labService.GetTemplates()
+	c.JSON(http.StatusOK, templates)
+}
+
+// GetLabTemplate returns a specific lab template
+func (h *Handler) GetLabTemplate(c *gin.Context) {
+	templateID := c.Param("id")
+	if templateID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Template ID required"})
+		return
+	}
+
+	template, exists := h.labService.GetTemplate(templateID)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Template not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, template)
+}
+
+// CreateLabFromTemplate creates a lab from a template
+func (h *Handler) CreateLabFromTemplate(c *gin.Context) {
+	templateID := c.Param("id")
+	if templateID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Template ID required"})
 		return
 	}
 
@@ -119,19 +171,18 @@ func (h *Handler) CreateLab(c *gin.Context) {
 
 	userObj := user.(*models.User)
 
-	// Generate UUID if no name is provided
-	labName := req.Name
-	if labName == "" {
-		labName = models.GenerateID()
-	}
-
-	lab, err := h.labService.CreateLab(labName, userObj.ID, req.Duration)
+	lab, err := h.labService.CreateLabFromTemplate(templateID, userObj.ID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusCreated, lab)
+}
+
+// CreateLab handles lab creation (deprecated - use templates instead)
+func (h *Handler) CreateLab(c *gin.Context) {
+	c.JSON(http.StatusBadRequest, gin.H{"error": "Direct lab creation is not allowed. Please use a lab template instead."})
 }
 
 // GetLab handles retrieving a specific lab

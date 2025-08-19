@@ -23,59 +23,21 @@ interface StartupStep {
 }
 
 export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
-  const [startupSteps, setStartupSteps] = useState<StartupStep[]>([
-    {
-      id: "1",
-      name: "Initializing Infrastructure",
-      status: "running",
-      message: "Setting up virtual machines and networking...",
-      timestamp: new Date().toISOString(),
-    },
-    {
-      id: "2",
-      name: "Deploying Spectro Cloud Platform",
-      status: "pending",
-      message: "Waiting to start...",
-      timestamp: "",
-    },
-    {
-      id: "3",
-      name: "Configuring Kubernetes Cluster",
-      status: "pending",
-      message: "Waiting to start...",
-      timestamp: "",
-    },
-    {
-      id: "4",
-      name: "Setting up OpenShift Environment",
-      status: "pending",
-      message: "Waiting to start...",
-      timestamp: "",
-    },
-    {
-      id: "5",
-      name: "Generating Access Credentials",
-      status: "pending",
-      message: "Waiting to start...",
-      timestamp: "",
-    },
-    {
-      id: "6",
-      name: "Final Configuration",
-      status: "pending",
-      message: "Waiting to start...",
-      timestamp: "",
-    },
-  ]);
-  const [overallProgress, setOverallProgress] = useState(15);
-  const [logs, setLogs] = useState<string[]>([
-    "[INFO] Starting lab initialization...",
-    "[INFO] Checking system requirements...",
-    "[INFO] Allocating resources for lab environment...",
-    "[INFO] Creating virtual network infrastructure...",
-    "[INFO] Deploying base virtual machines...",
-  ]);
+  const [services, setServices] = useState<Array<{
+    name: string;
+    description: string;
+    status: string;
+    progress: number;
+    steps: StartupStep[];
+    started_at?: string;
+    completed_at?: string;
+    error?: string;
+  }>>([]);
+  const [overallProgress, setOverallProgress] = useState(0);
+  const [logs, setLogs] = useState<string[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+
 
   const fetchLabStatus = useCallback(async () => {
     try {
@@ -91,109 +53,89 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
     }
   }, [labId, onLabReady]);
 
+  const fetchProgress = useCallback(async () => {
+    try {
+      const progressData = await apiService.getLabProgress(labId);
+      
+      if (progressData) {
+        setOverallProgress(progressData.overall || 0);
+        setLogs(progressData.logs || []);
+        
+        // Convert services data
+        const servicesData = progressData.services?.map((service) => ({
+          name: service.name,
+          description: service.description,
+          status: service.status,
+          progress: service.progress,
+          steps: service.steps.map((step, index) => ({
+            id: String(index + 1),
+            name: step.name,
+            status: step.status as "pending" | "running" | "completed" | "failed",
+            message: step.message || "",
+            timestamp: step.started_at || "",
+          })),
+          started_at: service.started_at,
+          completed_at: service.completed_at,
+          error: service.error,
+        })) || [];
+        
+        setServices(servicesData);
+        
+        // Check if all services are completed or overall progress is 100%
+        const allServicesCompleted = servicesData.length > 0 && servicesData.every(service => service.status === 'completed');
+        const progressComplete = (progressData.overall || 0) >= 100;
+        
+        if (allServicesCompleted || progressComplete) {
+          if (!isCompleting) {
+            setIsCompleting(true);
+            console.log("Lab appears complete, verifying status...");
+          }
+          
+          // Double-check lab status before redirecting
+          try {
+            const labData = await apiService.getLab(labId);
+            if (labData.status === 'ready') {
+              console.log("Lab confirmed ready, redirecting...");
+              onLabReady();
+              return;
+            }
+          } catch (statusErr) {
+            console.error("Failed to verify lab status:", statusErr);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch progress:", err);
+    }
+  }, [labId, onLabReady]);
+
   const refreshStatus = async () => {
     setIsRefreshing(true);
     await fetchLabStatus();
     setIsRefreshing(false);
   };
 
-  // Simulate startup progress
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setOverallProgress(prev => {
-        if (prev >= 100) return 100;
-        return prev + Math.random() * 5;
-      });
-    }, 2000);
 
-    return () => clearInterval(interval);
-  }, []);
 
-  // Simulate step progression
-  useEffect(() => {
-    const stepInterval = setInterval(() => {
-      setStartupSteps(prev => {
-        const newSteps = [...prev];
-        const runningIndex = newSteps.findIndex(step => step.status === 'running');
-        
-        if (runningIndex !== -1) {
-          // Complete current step
-          newSteps[runningIndex] = {
-            ...newSteps[runningIndex],
-            status: 'completed',
-            message: 'Step completed successfully',
-            timestamp: new Date().toISOString(),
-          };
-          
-          // Start next step if available
-          const nextIndex = runningIndex + 1;
-          if (nextIndex < newSteps.length) {
-            newSteps[nextIndex] = {
-              ...newSteps[nextIndex],
-              status: 'running',
-              message: getStepMessage(newSteps[nextIndex].name),
-              timestamp: new Date().toISOString(),
-            };
-          }
-        }
-        
-        return newSteps;
-      });
-    }, 3000);
 
-    return () => clearInterval(stepInterval);
-  }, []);
 
-  // Simulate log updates
-  useEffect(() => {
-    const logInterval = setInterval(() => {
-      setLogs(prev => {
-        const newLogs = [...prev];
-        const logMessages = [
-          "[INFO] Configuring network interfaces...",
-          "[INFO] Installing required packages...",
-          "[INFO] Setting up firewall rules...",
-          "[INFO] Configuring storage volumes...",
-          "[INFO] Starting container runtime...",
-          "[INFO] Deploying Spectro Cloud components...",
-          "[INFO] Initializing Kubernetes control plane...",
-          "[INFO] Joining worker nodes to cluster...",
-          "[INFO] Installing OpenShift operators...",
-          "[INFO] Configuring authentication...",
-          "[INFO] Generating SSL certificates...",
-          "[INFO] Setting up monitoring...",
-          "[INFO] Creating user accounts...",
-          "[INFO] Finalizing configuration...",
-        ];
-        
-        const randomMessage = logMessages[Math.floor(Math.random() * logMessages.length)];
-        newLogs.push(`[${new Date().toLocaleTimeString()}] ${randomMessage}`);
-        
-        // Keep only last 20 logs
-        return newLogs.slice(-20);
-      });
-    }, 1500);
 
-    return () => clearInterval(logInterval);
-  }, []);
 
-  // Check lab status periodically
+  // Check lab status and progress periodically
   useEffect(() => {
     const statusInterval = setInterval(fetchLabStatus, 5000);
-    return () => clearInterval(statusInterval);
-  }, [labId, fetchLabStatus]);
-
-  const getStepMessage = (stepName: string): string => {
-    const messages: Record<string, string> = {
-      "Initializing Infrastructure": "Setting up virtual machines and networking...",
-      "Deploying Spectro Cloud Platform": "Installing Spectro Cloud components...",
-      "Configuring Kubernetes Cluster": "Setting up Kubernetes control plane...",
-      "Setting up OpenShift Environment": "Deploying OpenShift operators...",
-      "Generating Access Credentials": "Creating user accounts and credentials...",
-      "Final Configuration": "Applying final settings and configurations...",
+    const progressInterval = setInterval(fetchProgress, 2000);
+    
+    // Fetch initial progress
+    fetchProgress();
+    
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(progressInterval);
     };
-    return messages[stepName] || "Processing...";
-  };
+  }, [labId, fetchLabStatus, fetchProgress, isCompleting]);
+
+
 
   const getStepIcon = (status: StartupStep['status']) => {
     switch (status) {
@@ -208,12 +150,11 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
     }
   };
 
-  const completedSteps = startupSteps.filter(step => step.status === 'completed').length;
-  const totalSteps = startupSteps.length;
+  const completedServices = services.filter(service => service.status === 'completed').length;
+  const totalServices = services.length;
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -236,14 +177,14 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
               Overall Progress
             </CardTitle>
             <CardDescription>
-              Step {completedSteps} of {totalSteps} completed
+              Service {completedServices} of {totalServices} completed
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <Progress value={overallProgress} className="h-3" />
               <div className="flex justify-between text-sm">
-                <span>Initializing...</span>
+                <span>{isCompleting ? "Completing..." : overallProgress >= 100 ? "Finalizing..." : "Initializing..."}</span>
                 <span>{Math.round(overallProgress)}%</span>
               </div>
             </div>
@@ -251,41 +192,61 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Startup Steps */}
+          {/* Services */}
           <Card>
             <CardHeader>
-              <CardTitle>Startup Steps</CardTitle>
+              <CardTitle>Services</CardTitle>
               <CardDescription>
-                Current progress of lab initialization
+                Individual service progress and status
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {startupSteps.map((step) => (
-                  <div key={step.id} className="flex items-start gap-3 p-3 rounded-lg border">
-                    {getStepIcon(step.status)}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-sm">{step.name}</h4>
-                        <Badge 
-                          variant={
-                            step.status === 'completed' ? 'default' :
-                            step.status === 'running' ? 'secondary' :
-                            step.status === 'failed' ? 'destructive' : 'outline'
-                          }
-                          className="text-xs"
-                        >
-                          {step.status}
-                        </Badge>
+              <div className="space-y-4">
+                {services.map((service) => (
+                  <div key={service.name} className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h4 className="font-medium text-sm">{service.name}</h4>
+                        <p className="text-xs text-muted-foreground">{service.description}</p>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {step.message}
-                      </p>
-                      {step.timestamp && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {new Date(step.timestamp).toLocaleTimeString()}
-                        </p>
-                      )}
+                      <Badge 
+                        variant={
+                          service.status === 'completed' ? 'default' :
+                          service.status === 'running' ? 'secondary' :
+                          service.status === 'failed' ? 'destructive' : 'outline'
+                        }
+                        className="text-xs"
+                      >
+                        {service.status}
+                      </Badge>
+                    </div>
+                    
+                    <Progress value={service.progress} className="h-2 mb-3" />
+                    
+                    <div className="space-y-2">
+                      {service.steps.map((step) => (
+                        <div key={step.id} className="flex items-start gap-2 text-xs">
+                          {getStepIcon(step.status)}
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{step.name}</span>
+                              <Badge 
+                                variant={
+                                  step.status === 'completed' ? 'default' :
+                                  step.status === 'running' ? 'secondary' :
+                                  step.status === 'failed' ? 'destructive' : 'outline'
+                                }
+                                className="text-xs"
+                              >
+                                {step.status}
+                              </Badge>
+                            </div>
+                            {step.message && (
+                              <p className="text-muted-foreground mt-1">{step.message}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -317,11 +278,18 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
         <Alert>
           <Clock className="h-4 w-4" />
           <AlertDescription>
-            Your lab is currently being provisioned. You&apos;ll be automatically redirected once it&apos;s ready.
-            This process typically takes 3-5 minutes depending on system load.
+            {isCompleting ? (
+              <>
+                🎉 Lab setup complete! Redirecting to your lab environment...
+              </>
+            ) : (
+              <>
+                Your lab is currently being provisioned. You&apos;ll be automatically redirected once it&apos;s ready.
+                This process typically takes 3-5 minutes depending on system load.
+              </>
+            )}
           </AlertDescription>
         </Alert>
       </div>
-    </div>
   );
 }

@@ -155,7 +155,19 @@ const MaskedSecret: React.FC<{ secret: string }> = ({ secret }) => {
   );
 };
 
-function LabSessionPageContent({ labId = "demo-lab-1" }: { labId?: string }) {
+function LabSessionPageContent() {
+  const [labId, setLabId] = useState<string>("demo-lab-1");
+
+  // Read labId from URL parameters on client side
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const idFromUrl = urlParams.get('id');
+      if (idFromUrl) {
+        setLabId(idFromUrl);
+      }
+    }
+  }, []);
   const [lab, setLab] = useState<LabSession | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -215,7 +227,11 @@ function LabSessionPageContent({ labId = "demo-lab-1" }: { labId?: string }) {
 
   // Show starting view if lab is in starting status
   if (lab.status === "starting" || lab.status === "provisioning") {
-    return <LabStartingView labId={labId} onLabReady={handleLabReady} />;
+    return (
+      <AppLayout>
+        <LabStartingView labId={labId} onLabReady={handleLabReady} />
+      </AppLayout>
+    );
   }
 
   return (
@@ -331,7 +347,7 @@ kubectl port-forward svc/vertex-ui 8443:443 -n vertex</pre>
 export default function LabSessionPage() {
   return (
     <ProtectedRoute>
-      <LabSessionPageContent labId="demo-lab-1" />
+      <LabSessionPageContent />
     </ProtectedRoute>
   );
 }

@@ -1,6 +1,6 @@
 // API service for communicating with the backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://tunnel.wcrum.dev';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export type UserRole = 'user' | 'admin';
 
@@ -61,6 +61,23 @@ export interface CreateLabRequest {
   name?: string; // Optional since backend will generate UUID
   owner_id: string;
   duration: number;
+}
+
+export interface ServiceTemplate {
+  name: string;
+  type: string;
+  description: string;
+  config: Record<string, string>;
+}
+
+export interface LabTemplate {
+  name: string;
+  id: string;
+  description: string;
+  expiration_duration: string;
+  owner: string;
+  created_at: string;
+  services: ServiceTemplate[];
 }
 
 class ApiService {
@@ -141,6 +158,33 @@ class ApiService {
     return this.request<LabResponse>(`/api/labs/${labId}`);
   }
 
+  async getLabProgress(labId: string): Promise<{
+    lab_id: string;
+    overall: number;
+    current_step: string;
+    services: Array<{
+      name: string;
+      description: string;
+      status: string;
+      progress: number;
+      steps: Array<{
+        name: string;
+        status: string;
+        message: string;
+        started_at?: string;
+        completed_at?: string;
+        error?: string;
+      }>;
+      started_at?: string;
+      completed_at?: string;
+      error?: string;
+    }>;
+    logs: string[];
+    updated_at: string;
+  }> {
+    return this.request(`/api/labs/${labId}/progress`);
+  }
+
   async getUserLabs(): Promise<LabResponse[]> {
     return this.request<LabResponse[]>('/api/labs');
   }
@@ -171,6 +215,21 @@ class ApiService {
 
   async cleanupLab(labId: string): Promise<void> {
     await this.request(`/api/admin/labs/${labId}/cleanup`, {
+      method: 'POST',
+    });
+  }
+
+  // Template management
+  async getTemplates(): Promise<LabTemplate[]> {
+    return this.request<LabTemplate[]>('/api/templates');
+  }
+
+  async getTemplate(templateId: string): Promise<LabTemplate> {
+    return this.request<LabTemplate>(`/api/templates/${templateId}`);
+  }
+
+  async createLabFromTemplate(templateId: string): Promise<Lab> {
+    return this.request<Lab>(`/api/templates/${templateId}/labs`, {
       method: 'POST',
     });
   }
@@ -211,6 +270,11 @@ class ApiService {
     await this.request(`/api/admin/users/${userId}`, {
       method: 'DELETE',
     });
+  }
+
+  // Get current user (validate token)
+  async getCurrentUser(): Promise<User> {
+    return this.request<User>('/api/auth/me');
   }
 
   // Health check

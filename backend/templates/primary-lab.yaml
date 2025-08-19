@@ -1,0 +1,13 @@
+name: "Basic Lab"
+id: "primary-lab"
+description: "A basic lab environment with Spectro Cloud access."
+expiration_duration: "2h"
+owner: "admin@spectrocloud.com"
+created_at: "2025-01-18T23:28:50Z"
+services:
+  - name: "palette-project"
+    type: "palette"
+    description: "Spectro Cloud control plane access"
+    config:
+      host: "training.spectrocloud.com"
+      api_key: "ZmIyY2QwNDllMGRlN2RmZTE1YmM1Mjk2N2FhOWM3NjQ="

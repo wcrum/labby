@@ -46,6 +46,7 @@ type Lab struct {
 	UpdatedAt   time.Time         `json:"updated_at"`
 	Credentials []Credential      `json:"credentials"`
 	ServiceData map[string]string `json:"service_data,omitempty"` // Store service-specific data for cleanup
+	TemplateID  string            `json:"template_id,omitempty"`  // Reference to the template used
 }
 
 // Credential represents access credentials for a lab service
