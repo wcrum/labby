@@ -1,0 +1,7 @@
+labs:
+ - name: "Spectro Cloud Lab"
+   duration: 15
+   owner: "admin"
+   access_required:
+    - "palette"
+    - "proxmox"
