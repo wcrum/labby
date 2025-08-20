@@ -1,5 +1,25 @@
 package main
 
+// @title           Spectro Lab API
+// @version         1.0
+// @description     A REST API for managing Spectro Cloud lab environments
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
+// @BasePath  /api
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
+
 import (
 	"log"
 	"os"
@@ -10,9 +30,13 @@ import (
 	"spectro-lab-backend/internal/handlers"
 	"spectro-lab-backend/internal/lab"
 
+	_ "spectro-lab-backend/docs" // This will be generated
+
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/rs/cors"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -100,6 +124,9 @@ func main() {
 	// Health check endpoint
 	router.GET("/health", handler.HealthCheck)
 
+	// Swagger documentation
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	// Public routes
 	router.POST("/api/auth/login", handler.Login)
 
@@ -117,6 +144,7 @@ func main() {
 		protected.GET("/labs/:id/progress", handler.GetLabProgress)
 		protected.DELETE("/labs/:id", handler.DeleteLab)
 		protected.POST("/labs/:id/stop", handler.StopLab)
+		protected.POST("/labs/:id/cleanup", handler.CleanupFailedLab)
 
 		// Template routes
 		protected.GET("/templates", handler.GetLabTemplates)

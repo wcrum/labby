@@ -1,17 +1,20 @@
 #!/bin/bash
 
-# Simple build script for Spectro Lab
+# Build and run spectro-lab in Docker
+
 set -e
 
-echo "🎨 Building frontend..."
-npm run build
+echo "Building spectro-lab Docker image..."
 
-echo "📁 Copying frontend to backend..."
-rm -rf backend/static
-cp -r out backend/static
+# Build the Docker image
+docker build -t spectro-lab .
 
-echo "🔨 Building backend..."
-cd backend
-go build -o server ./cmd/server
-
-echo "✅ Build complete! Run with: cd backend && ./server"
+echo "Docker image built successfully!"
+echo ""
+echo "To run the application:"
+echo "  docker run -p 8080:8080 spectro-lab"
+echo ""
+echo "Or use docker-compose:"
+echo "  docker-compose up"
+echo ""
+echo "The application will be available at: http://localhost:8080"

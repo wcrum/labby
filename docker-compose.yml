@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  spectro-lab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - JWT_SECRET=your-secret-key-change-in-production
+    volumes:
+      # Optional: Mount templates directory for development
+      - ./backend/templates:/app/templates:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

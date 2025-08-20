@@ -219,6 +219,12 @@ class ApiService {
     });
   }
 
+  async cleanupFailedLab(labId: string): Promise<void> {
+    await this.request(`/api/labs/${labId}/cleanup`, {
+      method: 'POST',
+    });
+  }
+
   // Template management
   async getTemplates(): Promise<LabTemplate[]> {
     return this.request<LabTemplate[]>('/api/templates');

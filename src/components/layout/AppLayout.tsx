@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Shield, User, LogOut, Settings, Users, FlaskConical } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useTheme } from "@/lib/theme";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -16,6 +17,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children, showNav = true }: AppLayoutProps) {
   const { user, logout, isAdmin } = useAuth();
+  const { resolvedTheme } = useTheme();
 
   if (!user) {
     return <>{children}</>;
@@ -32,7 +34,11 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-3">
                   <img 
-                    src="/SpectroCloud_Horizontal_light-bkgd_RGB.png" 
+                    key={resolvedTheme}
+                    src={resolvedTheme === "dark" 
+                      ? "/SpectroCloud_Horizontal_dark-bkgd_RGB.png" 
+                      : "/SpectroCloud_Horizontal_light-bkgd_RGB.png"
+                    } 
                     alt="SpectroCloud" 
                     className="h-8 w-auto"
                   />

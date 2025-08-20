@@ -107,7 +107,7 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
     } catch (err) {
       console.error("Failed to fetch progress:", err);
     }
-  }, [labId, onLabReady]);
+  }, [labId, onLabReady, isCompleting]);
 
   const refreshStatus = async () => {
     setIsRefreshing(true);

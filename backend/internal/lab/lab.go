@@ -84,6 +84,13 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 	template, exists := s.templateManager.GetTemplate(templateID)
 	if !exists {
 		s.progressTracker.FailProgress(labID, "Template not found")
+		// Set lab status to error
+		s.mu.Lock()
+		if lab, exists := s.labs[labID]; exists {
+			lab.Status = models.LabStatusError
+			lab.UpdatedAt = time.Now()
+		}
+		s.mu.Unlock()
 		return
 	}
 
@@ -122,6 +129,7 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 	}
 
 	// Provision each service defined in the template
+	hasFailures := false
 	for _, serviceTemplate := range template.Services {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Setting up service: %s (%s)", serviceTemplate.Name, serviceTemplate.Type))
 
@@ -135,6 +143,18 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 		default:
 			s.progressTracker.AddLog(labID, fmt.Sprintf("Unknown service type: %s", serviceTemplate.Type))
 		}
+
+		// Check if the lab status is now error (indicating a failure)
+		s.mu.RLock()
+		if lab, exists := s.labs[labID]; exists && lab.Status == models.LabStatusError {
+			hasFailures = true
+		}
+		s.mu.RUnlock()
+
+		// If we have failures, stop provisioning
+		if hasFailures {
+			break
+		}
 	}
 
 	s.mu.Lock()
@@ -145,13 +165,21 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 		return
 	}
 
-	// Update lab status to ready
-	lab.Status = models.LabStatusReady
-	lab.UpdatedAt = time.Now()
+	// Only set status to ready if no failures occurred
+	if !hasFailures {
+		lab.Status = models.LabStatusReady
+		lab.UpdatedAt = time.Now()
+		s.progressTracker.CompleteProgress(labID)
+		s.progressTracker.AddLog(labID, "Lab setup completed successfully!")
+	} else {
+		// Ensure lab status is set to error if not already set
+		if lab.Status != models.LabStatusError {
+			lab.Status = models.LabStatusError
+			lab.UpdatedAt = time.Now()
+		}
+		s.progressTracker.AddLog(labID, "Lab setup failed due to service errors")
+	}
 	s.mu.Unlock()
-
-	s.progressTracker.CompleteProgress(labID)
-	s.progressTracker.AddLog(labID, "Lab setup completed successfully!")
 }
 
 // provisionLab handles lab provisioning with real progress tracking
@@ -372,6 +400,15 @@ func (s *Service) provisionPaletteService(labID string, serviceTemplate models.S
 	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Creating Project", "failed", fmt.Sprintf("Failed to create project: %v", err))
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Project setup failed: %v", err))
+		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette Project setup failed: %v", err))
+
+		// Set lab status to error
+		s.mu.Lock()
+		if lab, exists := s.labs[labID]; exists {
+			lab.Status = models.LabStatusError
+			lab.UpdatedAt = time.Now()
+		}
+		s.mu.Unlock()
 		return
 	}
 
@@ -558,12 +595,35 @@ func (s *Service) CleanupExpiredLabs() {
 	}
 }
 
+// CleanupFailedLabs removes labs that have been in error status for too long
+func (s *Service) CleanupFailedLabs() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	// Clean up labs that have been in error status for more than 1 hour
+	errorThreshold := time.Hour
+
+	for labID, lab := range s.labs {
+		if lab.Status == models.LabStatusError {
+			timeSinceError := now.Sub(lab.UpdatedAt)
+			if timeSinceError > errorThreshold {
+				// Cleanup progress tracking
+				s.progressTracker.CleanupProgress(labID)
+				// Remove the lab
+				delete(s.labs, labID)
+			}
+		}
+	}
+}
+
 // StartCleanupScheduler starts a background task to clean up expired labs
 func (s *Service) StartCleanupScheduler() {
 	ticker := time.NewTicker(5 * time.Minute)
 	go func() {
 		for range ticker.C {
 			s.CleanupExpiredLabs()
+			s.CleanupFailedLabs()
 		}
 	}()
 }

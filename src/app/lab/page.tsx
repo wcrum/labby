@@ -14,6 +14,7 @@ import { motion } from "framer-motion";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { apiService, LabResponse } from "@/lib/api";
 import { LabStartingView } from "@/components/lab/LabStartingView";
+import { LabFailedView } from "@/components/lab/LabFailedView";
 import { AppLayout } from "@/components/layout/AppLayout";
 
 type Credential = {
@@ -230,6 +231,20 @@ function LabSessionPageContent() {
     return (
       <AppLayout>
         <LabStartingView labId={labId} onLabReady={handleLabReady} />
+      </AppLayout>
+    );
+  }
+
+  // Show failed view if lab is in error status
+  if (lab.status === "error") {
+    return (
+      <AppLayout>
+        <LabFailedView 
+          labId={labId} 
+          lab={lab} 
+          onRetry={() => window.location.reload()}
+          onCleanup={() => window.location.href = '/labs'}
+        />
       </AppLayout>
     );
   }
