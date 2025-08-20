@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Shield, User, LogOut, Settings, Users, FlaskConical } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -82,6 +83,8 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                     {user.name}
                   </span>
                 </div>
+                
+                <ThemeToggle />
                 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

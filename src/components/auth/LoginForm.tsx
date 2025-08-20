@@ -31,8 +31,25 @@ export function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/20 to-primary/10 p-4 relative overflow-hidden">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-secondary/5 to-accent/5 animate-pulse"></div>
+      
+      {/* Subtle geometric pattern */}
+      <div 
+        className="absolute inset-0 opacity-20 dark:opacity-10"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 25% 25%, hsl(var(--primary) / 0.1) 0%, transparent 25%),
+            radial-gradient(circle at 75% 75%, hsl(var(--secondary) / 0.1) 0%, transparent 25%),
+            linear-gradient(45deg, hsl(var(--muted-foreground) / 0.05) 25%, transparent 25%),
+            linear-gradient(-45deg, hsl(var(--muted-foreground) / 0.05) 25%, transparent 25%)
+          `,
+          backgroundSize: '100px 100px, 100px 100px, 20px 20px, 20px 20px',
+          backgroundPosition: '0 0, 50px 50px, 0 0, 10px 10px'
+        }}
+      ></div>
+      <Card className="w-full max-w-md relative z-10 backdrop-blur-sm bg-background/95 border-border/50 shadow-2xl shadow-primary/10 dark:shadow-primary/20">
         <CardHeader className="text-center space-y-4">
           <div className="mx-auto">
             <img 
