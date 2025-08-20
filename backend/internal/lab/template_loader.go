@@ -150,7 +150,7 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 	now := time.Now()
 	lab := &models.Lab{
 		ID:          models.GenerateID(),
-		Name:        template.Name,
+		Name:        models.GenerateLabName(), // Use short lab name instead of template name
 		Status:      models.LabStatusProvisioning,
 		OwnerID:     ownerID,
 		StartedAt:   now,

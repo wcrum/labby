@@ -55,15 +55,17 @@ func (v *PaletteProjectService) Name() string {
 
 // ExecuteSetup sets up Palette Project access and adds credentials
 func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error {
-	// Validate required environment variables
 	if v.host == "" || v.apiKey == "" {
 		return fmt.Errorf("PALETTE_HOST and PALETTE_API_KEY environment variables are required")
 	}
 
-	// Generate a unique sandbox ID for this lab
-	sandboxID := uuid.New().String()
+	// Extract short ID from lab name (format: lab-{shortID})
+	shortID := ctx.LabName
+	if strings.HasPrefix(ctx.LabName, "lab-") {
+		shortID = strings.TrimPrefix(ctx.LabName, "lab-")
+	}
 
-	fmt.Printf("Setting up Palette Project for lab %s...\n", sandboxID)
+	fmt.Printf("Setting up Palette Project for lab %s...\n", ctx.LabName)
 
 	// Initialize Palette client
 	pc := client.New(
@@ -85,14 +87,14 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	// Create Project Entity
 	projectEntity := models.V1ProjectEntity{
 		Metadata: &models.V1ObjectMeta{
-			Name: fmt.Sprintf("lab-%s", sandboxID),
+			Name: fmt.Sprintf("lab-%s", shortID),
 		},
 	}
 
 	// Create User Entity
 	userEntity := models.V1UserEntity{
 		Spec: &models.V1UserSpecEntity{
-			EmailID:   fmt.Sprintf("lab+%s@spectrocloud.com", sandboxID),
+			EmailID:   fmt.Sprintf("lab+%s@spectrocloud.com", shortID),
 			FirstName: "Lab",
 			LastName:  "User",
 		},
@@ -199,7 +201,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	fmt.Printf("- Creating API key for user\n")
 	body := &models.V1APIKeyEntity{
 		Metadata: &models.V1ObjectMeta{
-			Name:        fmt.Sprintf("lab-%s-api-key", sandboxID),
+			Name:        fmt.Sprintf("lab-%s-api-key", shortID),
 			Annotations: make(map[string]string),
 		},
 		Spec: &models.V1APIKeySpecEntity{
@@ -220,7 +222,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	fmt.Printf("- Creating edge registration token\n")
 	edgeEntity := &models.V1EdgeTokenEntity{
 		Metadata: &models.V1ObjectMeta{
-			Name: fmt.Sprintf("lab-%s", sandboxID),
+			Name: fmt.Sprintf("lab-%s", shortID),
 		},
 		Spec: &models.V1EdgeTokenSpecEntity{
 			DefaultProjectUID: projectID,
@@ -241,7 +243,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	fmt.Printf("  Edge token created: %s\n", edgeTokenGet.Payload.Spec.Token)
 
 	// Store lab-specific data in context for cleanup
-	ctx.Context = context.WithValue(ctx.Context, "palette_project_sandbox_id", sandboxID)
+	ctx.Context = context.WithValue(ctx.Context, "palette_project_sandbox_id", shortID)
 	ctx.Context = context.WithValue(ctx.Context, "palette_project_id", projectID)
 	ctx.Context = context.WithValue(ctx.Context, "palette_project_user_id", userID)
 	ctx.Context = context.WithValue(ctx.Context, "palette_project_name", projectEntity.Metadata.Name)
@@ -253,7 +255,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 		if ctx.Lab.ServiceData == nil {
 			ctx.Lab.ServiceData = make(map[string]string)
 		}
-		ctx.Lab.ServiceData["palette_project_sandbox_id"] = sandboxID
+		ctx.Lab.ServiceData["palette_project_sandbox_id"] = shortID
 		ctx.Lab.ServiceData["palette_project_id"] = projectID
 		ctx.Lab.ServiceData["palette_project_user_id"] = userID
 		ctx.Lab.ServiceData["palette_project_name"] = projectEntity.Metadata.Name
@@ -280,7 +282,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 		return fmt.Errorf("failed to add Palette Project credential: %w", err)
 	}
 
-	fmt.Printf("Palette Project setup completed for lab %s\n", sandboxID)
+	fmt.Printf("Palette Project setup completed for lab %s\n", ctx.LabName)
 	return nil
 }
 
@@ -289,6 +291,12 @@ func (v *PaletteProjectService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 	// Validate required environment variables
 	if v.host == "" || v.apiKey == "" {
 		return fmt.Errorf("PALETTE_HOST and PALETTE_API_KEY environment variables are required")
+	}
+
+	// Extract short ID from lab name (format: lab-{shortID})
+	shortID := ctx.LabID
+	if strings.HasPrefix(ctx.LabID, "lab-") {
+		shortID = strings.TrimPrefix(ctx.LabID, "lab-")
 	}
 
 	// Get lab-specific data from context
@@ -300,16 +308,14 @@ func (v *PaletteProjectService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 				sandboxID = storedSandboxID
 				fmt.Printf("Retrieved sandbox ID from lab ServiceData: %s\n", sandboxID)
 			} else {
-				// If sandbox ID is not in context, try to extract it from the lab ID
-				// The lab ID itself can be used as the sandbox ID in most cases
-				sandboxID = ctx.LabID
-				fmt.Printf("Warning: palette project sandbox ID not found in context or lab data, using lab ID as sandbox ID: %s\n", sandboxID)
+				// If sandbox ID is not in context, use the short ID from lab name
+				sandboxID = shortID
+				fmt.Printf("Warning: palette project sandbox ID not found in context or lab data, using short ID from lab name: %s\n", sandboxID)
 			}
 		} else {
-			// If sandbox ID is not in context, try to extract it from the lab ID
-			// The lab ID itself can be used as the sandbox ID in most cases
-			sandboxID = ctx.LabID
-			fmt.Printf("Warning: palette project sandbox ID not found in context, using lab ID as sandbox ID: %s\n", sandboxID)
+			// If sandbox ID is not in context, use the short ID from lab name
+			sandboxID = shortID
+			fmt.Printf("Warning: palette project sandbox ID not found in context, using short ID from lab name: %s\n", sandboxID)
 		}
 	}
 
@@ -409,7 +415,7 @@ func (v *PaletteProjectService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 		client.WithScopeTenant()(pc)
 	}
 
-	fmt.Printf("Cleaning up Palette Project resources for lab %s:\n", sandboxID)
+	fmt.Printf("Cleaning up Palette Project resources for lab %s:\n", ctx.LabID)
 
 	// If we don't have the project ID, try to find it by name
 	if projectID == "" {

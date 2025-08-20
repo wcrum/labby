@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -99,9 +100,17 @@ type LabResponse struct {
 	Credentials []Credential `json:"credentials"`
 }
 
-// GenerateID generates a new UUID
+// GenerateID generates a new short ID (8 characters)
 func GenerateID() string {
-	return uuid.New().String()
+	uuid := uuid.New()
+	// Take first 8 characters of UUID for shorter, readable IDs
+	return uuid.String()[:8]
+}
+
+// GenerateLabName generates a lab name with short ID format
+func GenerateLabName() string {
+	shortID := GenerateID()
+	return fmt.Sprintf("lab-%s", shortID)
 }
 
 // IsExpired checks if a lab or credential is expired

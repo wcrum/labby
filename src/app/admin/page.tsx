@@ -298,7 +298,7 @@ function AdminPageContent() {
               </div>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Enter project name (e.g., lab-482407e5-1e26-4695-89c4-f3916675f091)"
+                  placeholder="Enter project name (e.g., lab-482407e5)"
                   value={cleanupProjectName}
                   onChange={(e) => setCleanupProjectName(e.target.value)}
                   className="flex-1"

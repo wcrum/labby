@@ -57,7 +57,7 @@ func (s *Service) CreateLab(name, ownerID string, durationMinutes int) (*models.
 	now := time.Now()
 	lab := &models.Lab{
 		ID:          models.GenerateID(),
-		Name:        name,
+		Name:        models.GenerateLabName(), // Use short lab name format
 		Status:      models.LabStatusProvisioning,
 		OwnerID:     ownerID,
 		StartedAt:   now,
