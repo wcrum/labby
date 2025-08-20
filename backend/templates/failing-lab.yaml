@@ -10,4 +10,4 @@ services:
     description: "Spectro Cloud control plane access"
     config:
       host: "training.spectroclod.com"
-      api_key: "ZmIyY2QwNDllMGRlN2RmZTE1YmM1Mjk2N2FhOWM3NjQ="
+      api_key: "api-key"
