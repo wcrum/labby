@@ -35,7 +35,7 @@ func NewPaletteProjectService() *PaletteProjectService {
 
 // GetName returns the service name
 func (v *PaletteProjectService) GetName() string {
-	return "palette_project"
+	return "palette"
 }
 
 // GetDescription returns the service description
@@ -55,8 +55,17 @@ func (v *PaletteProjectService) Name() string {
 
 // ExecuteSetup sets up Palette Project access and adds credentials
 func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error {
+	// Update progress: Creating Project
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Creating Project", "running", "Creating project in Spectro Cloud...")
+	}
+
 	if v.host == "" || v.apiKey == "" {
-		return fmt.Errorf("PALETTE_HOST and PALETTE_API_KEY environment variables are required")
+		err := fmt.Errorf("PALETTE_HOST and PALETTE_API_KEY environment variables are required")
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Creating Project", "failed", err.Error())
+		}
+		return err
 	}
 
 	// Extract short ID from lab name (format: lab-{shortID})
@@ -104,22 +113,46 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	fmt.Printf("- Creating project: %s\n", projectEntity.Metadata.Name)
 	projectID, err := pc.CreateProject(&projectEntity)
 	if err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Creating Project", "failed", fmt.Sprintf("Failed to create project: %v", err))
+		}
 		return fmt.Errorf("failed to create project: %w", err)
 	}
 	fmt.Printf("  Project created with ID: %s\n", projectID)
+
+	// Update progress: Creating Project completed
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Creating Project", "completed", "Project created successfully")
+	}
+
+	// Update progress: Setting up User Account
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Setting up User Account", "running", "Setting up user account...")
+	}
 
 	// Create User
 	fmt.Printf("- Creating user: %s\n", userEntity.Spec.EmailID)
 	userID, err := pc.CreateUser(&userEntity)
 	if err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Setting up User Account", "failed", fmt.Sprintf("Failed to create user: %v", err))
+		}
 		return fmt.Errorf("failed to create user: %w", err)
 	}
 	fmt.Printf("  User created with ID: %s\n", userID)
+
+	// Update progress: Configuring Access Permissions
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Configuring Access Permissions", "running", "Configuring access permissions...")
+	}
 
 	// Get Project Admin Role
 	fmt.Printf("- Getting Project Admin role\n")
 	projectAdmin, err := pc.GetRole("Project Admin")
 	if err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Configuring Access Permissions", "failed", fmt.Sprintf("Failed to get Project Admin role: %v", err))
+		}
 		return fmt.Errorf("failed to get Project Admin role: %w", err)
 	}
 
@@ -135,7 +168,20 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 
 	fmt.Printf("- Assigning Project Admin role to user\n")
 	if err = pc.AssociateUserProjectRole(userID, &projectRolePatch); err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Configuring Access Permissions", "failed", fmt.Sprintf("Failed to associate user with project role: %v", err))
+		}
 		return fmt.Errorf("failed to associate user with project role: %w", err)
+	}
+
+	// Update progress: Configuring Access Permissions completed
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Configuring Access Permissions", "completed", "Permissions configured")
+	}
+
+	// Update progress: Setting up User Account completed (after user creation and role assignment)
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Setting up User Account", "completed", "User account created")
 	}
 
 	// Get User to get activation link
@@ -197,6 +243,11 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 		fmt.Printf("  Note: Password may need to be set manually in Palette UI\n")
 	}
 
+	// Update progress: Generating API Keys
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Generating API Keys", "running", "Generating API keys...")
+	}
+
 	// Create API Key
 	fmt.Printf("- Creating API key for user\n")
 	body := &models.V1APIKeyEntity{
@@ -214,9 +265,22 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	params := version1.NewV1APIKeysCreateParams().WithBody(body)
 	resp, err := pc.Client.V1APIKeysCreate(params)
 	if err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Generating API Keys", "failed", fmt.Sprintf("Failed to create API key: %v", err))
+		}
 		return fmt.Errorf("failed to create API key: %w", err)
 	}
 	fmt.Printf("  API key created: %s\n", resp.Payload.APIKey)
+
+	// Update progress: Generating API Keys completed
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Generating API Keys", "completed", "API keys generated")
+	}
+
+	// Update progress: Creating Edge Tokens
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Creating Edge Tokens", "running", "Creating edge tokens...")
+	}
 
 	// Create Edge Token
 	fmt.Printf("- Creating edge registration token\n")
@@ -232,15 +296,26 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	edgeTokenParams := version1.NewV1EdgeTokensCreateParams().WithBody(edgeEntity)
 	registrationTokenUid, err := pc.Client.V1EdgeTokensCreate(edgeTokenParams)
 	if err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Creating Edge Tokens", "failed", fmt.Sprintf("Failed to create edge token: %v", err))
+		}
 		return fmt.Errorf("failed to create edge token: %w", err)
 	}
 
 	// Get Edge Token details
 	edgeTokenGet, err := pc.Client.V1EdgeTokensUIDGet(version1.NewV1EdgeTokensUIDGetParams().WithUID(*registrationTokenUid.Payload.UID))
 	if err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Creating Edge Tokens", "failed", fmt.Sprintf("Failed to get edge token: %v", err))
+		}
 		return fmt.Errorf("failed to get edge token: %w", err)
 	}
 	fmt.Printf("  Edge token created: %s\n", edgeTokenGet.Payload.Spec.Token)
+
+	// Update progress: Creating Edge Tokens completed
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Creating Edge Tokens", "completed", "Edge tokens created")
+	}
 
 	// Store lab-specific data in context for cleanup
 	ctx.Context = context.WithValue(ctx.Context, "palette_project_sandbox_id", shortID)
@@ -279,6 +354,9 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	}
 
 	if err := ctx.AddCredential(credential); err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Setting up User Account", "failed", fmt.Sprintf("Failed to add credential: %v", err))
+		}
 		return fmt.Errorf("failed to add Palette Project credential: %w", err)
 	}
 

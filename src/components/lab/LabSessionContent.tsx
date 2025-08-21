@@ -238,7 +238,7 @@ export function LabSessionContent({ labId = "demo-lab-1" }: { labId?: string }) 
         <div className="space-y-1">
           <h1 className="text-2xl md:text-3xl font-semibold">{lab.name}</h1>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <User className="h-4 w-4" /> {lab.owner.name} · {lab.owner.email}
+            <User className="h-4 w-4" /> {lab.owner ? `${lab.owner.name} · ${lab.owner.email}` : 'Unknown Owner'}
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -279,7 +279,7 @@ export function LabSessionContent({ labId = "demo-lab-1" }: { labId?: string }) 
               </CardTitle>
               {c.url && (
                 <Button asChild variant="link" className="gap-1">
-                  <a href={`https://${c.url}`} target="_blank" rel="noreferrer">
+                  <a href={c.url.startsWith('http://') || c.url.startsWith('https://') ? c.url : `https://${c.url}`} target="_blank" rel="noreferrer">
                     Open <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
