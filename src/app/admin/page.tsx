@@ -19,7 +19,8 @@ import {
   User, 
   Users,
   Activity,
-  Calendar
+  Calendar,
+  AlertTriangle
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { LabSession } from "../lab/page";
@@ -32,7 +33,9 @@ import { apiService } from "@/lib/api";
 // Fetch all lab sessions from the API
 async function fetchAllLabSessions(): Promise<LabSession[]> {
   try {
+    console.log('Fetching all labs from API...');
     const labs = await apiService.getAllLabs();
+    console.log('API returned labs:', labs);
     
     // Transform the API response to match the LabSession interface
     return labs.map(lab => ({
@@ -41,10 +44,7 @@ async function fetchAllLabSessions(): Promise<LabSession[]> {
       status: lab.status,
       startedAt: lab.started_at,
       endsAt: lab.ends_at,
-      owner: {
-        name: lab.owner.name,
-        email: lab.owner.email
-      },
+      owner: lab.owner || { name: "Unknown", email: "unknown@example.com" },
       credentials: lab.credentials.map(cred => ({
         id: cred.id,
         label: cred.label,
@@ -57,7 +57,7 @@ async function fetchAllLabSessions(): Promise<LabSession[]> {
     }));
   } catch (error) {
     console.error('Failed to fetch labs:', error);
-    return [];
+    throw error; // Re-throw the error so the component can handle it
   }
 }
 
@@ -127,6 +127,7 @@ const MaskedSecret: React.FC<{ secret: string }> = ({ secret }) => {
 function AdminPageContent() {
   const [labs, setLabs] = useState<LabSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm] = useState("");
   const [statusFilter] = useState<string>("all");
   const [cleanupProjectName, setCleanupProjectName] = useState("");
@@ -140,16 +141,36 @@ function AdminPageContent() {
     let live = true;
     (async () => {
       setLoading(true);
-      const data = await fetchAllLabSessions();
-      if (!live) return;
-      setLabs(data);
-      setLoading(false);
+      setError(null);
+      try {
+        const data = await fetchAllLabSessions();
+        if (!live) return;
+        setLabs(data);
+      } catch (err) {
+        if (!live) return;
+        console.error('Failed to fetch labs:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load labs');
+        setLabs([]);
+      } finally {
+        if (live) {
+          setLoading(false);
+        }
+      }
     })();
+    
     const poll = setInterval(async () => {
-      const data = await fetchAllLabSessions();
-      if (!live) return;
-      setLabs(data);
+      try {
+        const data = await fetchAllLabSessions();
+        if (!live) return;
+        setLabs(data);
+        setError(null);
+      } catch (err) {
+        if (!live) return;
+        console.error('Failed to fetch labs during poll:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load labs');
+      }
     }, 10000); // Poll every 10 seconds for more responsive updates
+    
     return () => { live = false; clearInterval(poll); };
   }, []);
 
@@ -172,8 +193,8 @@ function AdminPageContent() {
 
   const filteredLabs = labs.filter(lab => {
     const matchesSearch = lab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         lab.owner.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         lab.owner.email.toLowerCase().includes(searchTerm.toLowerCase());
+                         (lab.owner?.name || "Unknown").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (lab.owner?.email || "unknown@example.com").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || lab.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -218,9 +239,16 @@ function AdminPageContent() {
               size="sm"
               onClick={async () => {
                 setLoading(true);
-                const data = await fetchAllLabSessions();
-                setLabs(data);
-                setLoading(false);
+                setError(null);
+                try {
+                  const data = await fetchAllLabSessions();
+                  setLabs(data);
+                } catch (err) {
+                  console.error('Failed to refresh labs:', err);
+                  setError(err instanceof Error ? err.message : 'Failed to load labs');
+                } finally {
+                  setLoading(false);
+                }
               }}
               disabled={loading}
               className="gap-2"
@@ -234,6 +262,19 @@ function AdminPageContent() {
             </Badge>
           </div>
         </header>
+
+        {/* Error Display */}
+        {error && (
+          <Card className="border-destructive">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                <p className="font-medium">Error loading labs</p>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{error}</p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -360,7 +401,7 @@ function AdminPageContent() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <User className="h-4 w-4" />
-                        {lab.owner.name} ({lab.owner.email})
+                        {lab.owner?.name || "Unknown"} ({lab.owner?.email || "unknown@example.com"})
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
@@ -500,7 +541,7 @@ function AdminPageContent() {
                               <TableCell>
                                 {cred.url ? (
                                   <Button asChild variant="ghost" size="sm">
-                                    <a href={`https://${cred.url}`} target="_blank" rel="noreferrer" className="flex items-center gap-1">
+                                    <a href={cred.url.startsWith('http://') || cred.url.startsWith('https://') ? cred.url : `https://${cred.url}`} target="_blank" rel="noreferrer" className="flex items-center gap-1">
                                       <ExternalLink className="h-4 w-4" />
                                       Open
                                     </a>

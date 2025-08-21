@@ -160,7 +160,7 @@ func main() {
 		admin.POST("/labs/:id/stop", handler.AdminStopLab)
 		admin.DELETE("/labs/:id", handler.AdminDeleteLab)
 		admin.POST("/labs/:id/cleanup", handler.CleanupLab)
-		admin.POST("/palette-project/cleanup", handler.CleanupPaletteProject)
+		admin.POST("/palette-project/cleanup", handler.AdminCleanupPaletteProject)
 		admin.GET("/users", handler.GetUsers)
 		admin.POST("/users", handler.CreateUser)
 		admin.PUT("/users/:id/role", handler.UpdateUserRole)

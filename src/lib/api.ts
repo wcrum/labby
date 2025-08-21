@@ -128,6 +128,11 @@ class ApiService {
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
+      // Handle 204 No Content responses (common for DELETE operations)
+      if (response.status === 204) {
+        return {} as T;
+      }
+
       return await response.json();
     } catch (error) {
       console.error('API request failed:', error);

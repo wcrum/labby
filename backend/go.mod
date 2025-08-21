@@ -16,6 +16,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
+require github.com/spectrocloud/palette-sdk-go-internal v0.0.0-20250706201310-0a07010206fe // indirect
+
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -58,6 +60,8 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
+	github.com/spectrocloud/gomi v1.14.1-0.20231206064212-951160f8c919 // indirect
+	github.com/spectrocloud/hapi v1.14.1-0.20240416062307-ced362794a82 // indirect
 	github.com/swaggo/files v1.0.1 // indirect
 	github.com/swaggo/gin-swagger v1.6.0 // indirect
 	github.com/swaggo/swag v1.16.6 // indirect
@@ -83,3 +87,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/spectrocloud/palette-sdk-go-internal => ../../palette-sdk-go-internal

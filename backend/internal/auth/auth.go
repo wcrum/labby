@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"spectro-lab-backend/internal/models"
@@ -114,22 +115,29 @@ func (s *Service) GenerateToken(user *models.User) (string, error) {
 
 // ValidateToken validates a JWT token and returns the user
 func (s *Service) ValidateToken(tokenString string) (*models.User, error) {
+	fmt.Printf("ValidateToken: Validating token: %s...\n", tokenString[:10]+"...")
+
 	token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return s.jwtSecret, nil
 	})
 
 	if err != nil {
+		fmt.Printf("ValidateToken: JWT parsing failed: %v\n", err)
 		return nil, ErrInvalidToken
 	}
 
 	if claims, ok := token.Claims.(*JWTClaims); ok && token.Valid {
+		fmt.Printf("ValidateToken: Token claims - UserID: %s, Email: %s, Role: %s\n", claims.UserID, claims.Email, claims.Role)
 		user, err := s.GetUserByID(claims.UserID)
 		if err != nil {
+			fmt.Printf("ValidateToken: User not found by ID %s: %v\n", claims.UserID, err)
 			return nil, ErrInvalidToken
 		}
+		fmt.Printf("ValidateToken: User found: %s\n", user.Email)
 		return user, nil
 	}
 
+	fmt.Printf("ValidateToken: Token claims invalid or token not valid\n")
 	return nil, ErrInvalidToken
 }
 

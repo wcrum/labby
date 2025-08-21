@@ -18,24 +18,32 @@ export function LabManager() {
     try {
       setError("");
       const userLabs = await apiService.getUserLabs();
-      setLabs(userLabs);
-    } catch (err) {
-      setError("Failed to load labs. Please try again.");
+      setLabs(userLabs || []); // Ensure labs is always an array
+    } catch (err: any) {
       console.error("Failed to fetch labs:", err);
+      
+      // Check if it's an authentication error
+      if (err.message && err.message.includes("Invalid token")) {
+        setError("Authentication failed. Please log in again.");
+        // Redirect to login or clear auth state
+        apiService.clearToken();
+        window.location.href = "/";
+      } else {
+        setError("Failed to load labs. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const refreshLabs = async () => {
+    setLoading(true);
     await fetchLabs();
   };
 
   useEffect(() => {
     fetchLabs();
   }, []);
-
-
 
   if (loading) {
     return (
@@ -72,8 +80,11 @@ export function LabManager() {
     );
   }
 
+  // Ensure labs is always an array before checking length
+  const labsArray = Array.isArray(labs) ? labs : [];
+
   // If user has no labs, show message to create from template
-  if (labs.length === 0) {
+  if (labsArray.length === 0) {
     return (
       <div className="flex items-center justify-center p-4">
         <Card className="w-full max-w-md">
@@ -100,8 +111,8 @@ export function LabManager() {
   }
 
   // If user has exactly one lab, show it
-  if (labs.length === 1) {
-    const lab = labs[0];
+  if (labsArray.length === 1) {
+    const lab = labsArray[0];
     return <LabSessionContent labId={lab.id} />;
   }
 
@@ -122,12 +133,12 @@ export function LabManager() {
         <CardContent className="space-y-4">
           <Alert>
             <AlertDescription>
-              You currently have {labs.length} lab sessions. Only one active lab is allowed per user.
+              You currently have {labsArray.length} lab sessions. Only one active lab is allowed per user.
             </AlertDescription>
           </Alert>
           
           <div className="space-y-2">
-            {labs.map((lab) => (
+            {labsArray.map((lab) => (
               <Card key={lab.id} className="p-3">
                 <div className="flex items-center justify-between">
                   <div>

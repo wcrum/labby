@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { Copy, Eye, EyeOff, Clock, ExternalLink, ShieldCheck, Info, Server, User } from "lucide-react";
+import { Copy, Eye, EyeOff, Clock, ExternalLink, ShieldCheck, Info, Server, User, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { apiService, LabResponse } from "@/lib/api";
@@ -45,7 +46,7 @@ function convertLabResponse(labResponse: LabResponse): LabSession {
     status: labResponse.status,
     startedAt: labResponse.started_at,
     endsAt: labResponse.ends_at,
-    owner: labResponse.owner,
+    owner: labResponse.owner || { name: "Unknown", email: "unknown@example.com" },
     credentials: labResponse.credentials.map(cred => ({
       id: cred.id,
       label: cred.label,
@@ -64,7 +65,15 @@ async function fetchLabSession(labId: string): Promise<LabSession> {
     return convertLabResponse(labResponse);
   } catch (error) {
     console.error("Failed to fetch lab:", error);
-    // Fallback to mock data for development
+    
+    // Check if it's a "Lab not found" error
+    if (error instanceof Error && error.message.includes("Lab not found")) {
+      // Return a proper error state instead of mock data
+      throw new Error(`Lab with ID "${labId}" not found. Please check the lab ID or create a new lab.`);
+    }
+    
+    // For other errors, fallback to mock data for development
+    console.warn("Using fallback mock data due to API error");
     await new Promise((r) => setTimeout(r, 600));
     const now = new Date();
     const in45 = new Date(now.getTime() + 45 * 60 * 1000);
@@ -171,6 +180,7 @@ function LabSessionPageContent() {
   }, []);
   const [lab, setLab] = useState<LabSession | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const getBadgeVariant = (status: LabSession['status']) => {
     switch (status) {
@@ -195,25 +205,87 @@ function LabSessionPageContent() {
     let live = true;
     (async () => {
       setLoading(true);
-      const data = await fetchLabSession(labId);
-      if (!live) return;
-      setLab(data);
-      setLoading(false);
+      setError(null);
+      try {
+        const data = await fetchLabSession(labId);
+        if (!live) return;
+        setLab(data);
+      } catch (err) {
+        if (!live) return;
+        setError(err instanceof Error ? err.message : "Failed to load lab");
+        setLab(null);
+      } finally {
+        if (live) {
+          setLoading(false);
+        }
+      }
     })();
+    
     const poll = setInterval(async () => {
-      const data = await fetchLabSession(labId);
-      if (!live) return;
-      setLab(data);
+      try {
+        const data = await fetchLabSession(labId);
+        if (!live) return;
+        setLab(data);
+        setError(null);
+      } catch (err) {
+        if (!live) return;
+        setError(err instanceof Error ? err.message : "Failed to load lab");
+        setLab(null);
+      }
     }, 15000);
+    
     return () => { live = false; clearInterval(poll); };
   }, [labId]);
 
   const handleLabReady = () => {
     // Refresh the lab data when it becomes ready
-    fetchLabSession(labId).then(setLab);
+    fetchLabSession(labId).then(setLab).catch(err => {
+      setError(err instanceof Error ? err.message : "Failed to load lab");
+    });
   };
 
-  if (loading || !lab) {
+  if (loading) {
+    return (
+      <div className="p-6 space-y-4">
+        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[0,1].map((i) => (
+            <div key={i} className="h-56 bg-muted animate-pulse rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="p-6 max-w-4xl mx-auto">
+          <Card className="border-destructive">
+            <CardHeader>
+              <CardTitle className="text-destructive flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                Lab Not Found
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground">{error}</p>
+              <div className="flex gap-2">
+                <Button onClick={() => window.location.href = '/labs'}>
+                  Browse Available Labs
+                </Button>
+                <Button variant="outline" onClick={() => window.location.reload()}>
+                  Try Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!lab) {
     return (
       <div className="p-6 space-y-4">
         <div className="h-8 w-64 bg-muted animate-pulse rounded" />
@@ -256,7 +328,8 @@ function LabSessionPageContent() {
           <div className="space-y-1">
             <h1 className="text-2xl md:text-3xl font-semibold">{lab.name}</h1>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <User className="h-4 w-4" /> {lab.owner.name} · {lab.owner.email}
+              <User className="h-4 w-4" /> 
+              {lab.owner ? `${lab.owner.name} · ${lab.owner.email}` : 'Unknown Owner'}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -285,7 +358,7 @@ function LabSessionPageContent() {
                 </CardTitle>
                 {c.url && (
                   <Button asChild variant="link" className="gap-1">
-                    <a href={`https://${c.url}`} target="_blank" rel="noreferrer">
+                    <a href={c.url.startsWith('http://') || c.url.startsWith('https://') ? c.url : `https://${c.url}`} target="_blank" rel="noreferrer">
                       Open <ExternalLink className="h-4 w-4" />
                     </a>
                   </Button>

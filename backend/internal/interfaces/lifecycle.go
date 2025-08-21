@@ -22,13 +22,14 @@ type Credential struct {
 
 // SetupContext provides context and utilities for setup operations
 type SetupContext struct {
-	LabID         string
-	LabName       string
-	Duration      int // Duration in minutes
-	OwnerID       string
-	Context       context.Context
-	Lab           *models.Lab // Reference to the lab for persistent data storage
-	AddCredential func(credential *Credential) error
+	LabID          string
+	LabName        string
+	Duration       int // Duration in minutes
+	OwnerID        string
+	Context        context.Context
+	Lab            *models.Lab // Reference to the lab for persistent data storage
+	AddCredential  func(credential *Credential) error
+	UpdateProgress func(stepName, status, message string) // Function to update progress steps
 }
 
 // CleanupContext provides context and utilities for cleanup operations

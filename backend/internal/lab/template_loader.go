@@ -123,7 +123,7 @@ func (tl *TemplateLoader) validateTemplate(template *models.LabTemplate) error {
 
 		// Validate service type
 		switch service.Type {
-		case "palette", "proxmox", "generic":
+		case "palette", "proxmox", "proxmox_user", "palette_tenant", "generic":
 			// Valid service types
 		default:
 			return fmt.Errorf("unsupported service type: %s", service.Type)
@@ -148,17 +148,25 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 
 	// Create lab
 	now := time.Now()
+
+	// Extract service types from template for tracking
+	usedServices := make([]string, 0, len(template.Services))
+	for _, service := range template.Services {
+		usedServices = append(usedServices, service.Type)
+	}
+
 	lab := &models.Lab{
-		ID:          models.GenerateID(),
-		Name:        models.GenerateLabName(), // Use short lab name instead of template name
-		Status:      models.LabStatusProvisioning,
-		OwnerID:     ownerID,
-		StartedAt:   now,
-		EndsAt:      now.Add(duration),
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		Credentials: []models.Credential{},
-		TemplateID:  templateID, // Store reference to template
+		ID:           models.GenerateID(),
+		Name:         models.GenerateLabName(), // Use short lab name instead of template name
+		Status:       models.LabStatusProvisioning,
+		OwnerID:      ownerID,
+		StartedAt:    now,
+		EndsAt:       now.Add(duration),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Credentials:  []models.Credential{},
+		TemplateID:   templateID,   // Store reference to template
+		UsedServices: usedServices, // Track which services will be used
 	}
 
 	return lab, nil

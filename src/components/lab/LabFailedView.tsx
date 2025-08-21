@@ -54,7 +54,7 @@ export function LabFailedView({ labId, lab, onCleanup }: LabFailedViewProps) {
         <div className="space-y-1">
           <h1 className="text-2xl md:text-3xl font-semibold text-destructive">{lab.name}</h1>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <User className="h-4 w-4" /> {lab.owner.name} · {lab.owner.email}
+            <User className="h-4 w-4" /> {lab.owner ? `${lab.owner.name} · ${lab.owner.email}` : 'Unknown Owner'}
           </div>
         </div>
         <div className="flex items-center gap-3">

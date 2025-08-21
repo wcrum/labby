@@ -37,17 +37,18 @@ const (
 
 // Lab represents a lab session
 type Lab struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Status      LabStatus         `json:"status"`
-	OwnerID     string            `json:"owner_id"`
-	StartedAt   time.Time         `json:"started_at"`
-	EndsAt      time.Time         `json:"ends_at"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	Credentials []Credential      `json:"credentials"`
-	ServiceData map[string]string `json:"service_data,omitempty"` // Store service-specific data for cleanup
-	TemplateID  string            `json:"template_id,omitempty"`  // Reference to the template used
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Status       LabStatus         `json:"status"`
+	OwnerID      string            `json:"owner_id"`
+	StartedAt    time.Time         `json:"started_at"`
+	EndsAt       time.Time         `json:"ends_at"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
+	Credentials  []Credential      `json:"credentials"`
+	ServiceData  map[string]string `json:"service_data,omitempty"`  // Store service-specific data for cleanup
+	TemplateID   string            `json:"template_id,omitempty"`   // Reference to the template used
+	UsedServices []string          `json:"used_services,omitempty"` // Track which services were used for this lab
 }
 
 // Credential represents access credentials for a lab service
