@@ -3,10 +3,10 @@ package handlers
 import (
 	"net/http"
 
-	"spectro-lab-backend/internal/interfaces"
-	"spectro-lab-backend/internal/lab"
-	"spectro-lab-backend/internal/models"
-	"spectro-lab-backend/internal/services"
+	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/lab"
+	"github.com/wcrum/labby/internal/models"
+	"github.com/wcrum/labby/internal/services"
 
 	"github.com/gin-gonic/gin"
 )

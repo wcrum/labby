@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"spectro-lab-backend/internal/models"
+	"github.com/wcrum/labby/internal/models"
 
 	"github.com/gin-gonic/gin"
 )

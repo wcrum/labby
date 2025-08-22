@@ -80,6 +80,33 @@ export interface LabTemplate {
   services: ServiceTemplate[];
 }
 
+export interface ServiceConfig {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  config: Record<string, string>;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceLimit {
+  id: string;
+  service_id: string;
+  max_labs: number;
+  max_duration: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceUsage {
+  service_id: string;
+  active_labs: number;
+  limit: number;
+}
+
 class ApiService {
   private token: string | null = null;
 
@@ -281,6 +308,59 @@ class ApiService {
     await this.request(`/api/admin/users/${userId}`, {
       method: 'DELETE',
     });
+  }
+
+  // Service management
+  async getServiceConfigs(): Promise<ServiceConfig[]> {
+    return this.request<ServiceConfig[]>('/api/admin/service-configs');
+  }
+
+  async createServiceConfig(config: Omit<ServiceConfig, 'id' | 'created_at' | 'updated_at'>): Promise<ServiceConfig> {
+    return this.request<ServiceConfig>('/api/admin/service-configs', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async updateServiceConfig(id: string, config: Partial<ServiceConfig>): Promise<ServiceConfig> {
+    return this.request<ServiceConfig>(`/api/admin/service-configs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
+
+  async deleteServiceConfig(id: string): Promise<void> {
+    await this.request(`/api/admin/service-configs/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getServiceLimits(): Promise<ServiceLimit[]> {
+    return this.request<ServiceLimit[]>('/api/admin/service-limits');
+  }
+
+  async createServiceLimit(limit: Omit<ServiceLimit, 'id' | 'created_at' | 'updated_at'>): Promise<ServiceLimit> {
+    return this.request<ServiceLimit>('/api/admin/service-limits', {
+      method: 'POST',
+      body: JSON.stringify(limit),
+    });
+  }
+
+  async updateServiceLimit(id: string, limit: Partial<ServiceLimit>): Promise<ServiceLimit> {
+    return this.request<ServiceLimit>(`/api/admin/service-limits/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(limit),
+    });
+  }
+
+  async deleteServiceLimit(id: string): Promise<void> {
+    await this.request(`/api/admin/service-limits/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getServiceUsage(): Promise<ServiceUsage[]> {
+    return this.request<ServiceUsage[]>('/api/admin/service-usage');
   }
 
   // Get current user (validate token)

@@ -26,11 +26,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"spectro-lab-backend/internal/auth"
-	"spectro-lab-backend/internal/handlers"
-	"spectro-lab-backend/internal/lab"
+	"github.com/wcrum/labby/internal/auth"
+	"github.com/wcrum/labby/internal/handlers"
+	"github.com/wcrum/labby/internal/lab"
 
-	_ "spectro-lab-backend/docs" // This will be generated
+	_ "github.com/wcrum/labby/docs" // This will be generated
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -56,6 +56,22 @@ func main() {
 	// Load lab templates
 	if err := labService.LoadTemplates("./templates"); err != nil {
 		log.Printf("Warning: Failed to load templates: %v", err)
+	}
+
+	// Load service configurations
+	log.Printf("Loading service configurations from ./service-configs")
+	if err := labService.LoadServiceConfigs("./service-configs"); err != nil {
+		log.Printf("Warning: Failed to load service configs: %v", err)
+	} else {
+		log.Printf("Successfully loaded service configurations")
+	}
+
+	// Load service limits
+	log.Printf("Loading service limits from ./service-configs")
+	if err := labService.LoadServiceLimits("./service-configs"); err != nil {
+		log.Printf("Warning: Failed to load service limits: %v", err)
+	} else {
+		log.Printf("Successfully loaded service limits")
 	}
 
 	handler := handlers.NewHandler(authService, labService)
@@ -165,6 +181,17 @@ func main() {
 		admin.POST("/users", handler.CreateUser)
 		admin.PUT("/users/:id/role", handler.UpdateUserRole)
 		admin.DELETE("/users/:id", handler.DeleteUser)
+
+		// Service configuration and limit management
+		admin.GET("/service-configs", handler.GetServiceConfigs)
+		admin.POST("/service-configs", handler.CreateServiceConfig)
+		admin.PUT("/service-configs/:id", handler.UpdateServiceConfig)
+		admin.DELETE("/service-configs/:id", handler.DeleteServiceConfig)
+		admin.GET("/service-limits", handler.GetServiceLimits)
+		admin.POST("/service-limits", handler.CreateServiceLimit)
+		admin.PUT("/service-limits/:id", handler.UpdateServiceLimit)
+		admin.DELETE("/service-limits/:id", handler.DeleteServiceLimit)
+		admin.GET("/service-usage", handler.GetServiceUsage)
 	}
 
 	// Start server

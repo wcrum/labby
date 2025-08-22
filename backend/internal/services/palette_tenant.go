@@ -7,12 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"spectro-lab-backend/internal/interfaces"
+	"github.com/wcrum/labby/internal/interfaces"
 
 	internalclient "github.com/spectrocloud/palette-sdk-go-internal/client"
 
 	"github.com/sethvargo/go-password/password"
-	"github.com/spectrocloud/hapi/models"
+	hapimodels "github.com/spectrocloud/hapi/models"
+)
+
+// Constants
+const (
+	PlaceholderTenantID = "TODO_TENANT_ID"
 )
 
 // PaletteTenantService handles setup and cleanup for Palette Tenant user accounts
@@ -89,7 +94,7 @@ func (v *PaletteTenantService) ExecuteSetup(ctx *interfaces.SetupContext) error 
 		if ctx.UpdateProgress != nil {
 			ctx.UpdateProgress("Connecting to Palette", "failed", errMsg)
 		}
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	// Extract short ID from lab name (format: lab-{shortID})
@@ -157,11 +162,11 @@ func (v *PaletteTenantService) ExecuteSetup(ctx *interfaces.SetupContext) error 
 		return err
 	}
 
-	tenantEntity := &models.V1TenantEntity{
-		Metadata: &models.V1ObjectMeta{
+	tenantEntity := &hapimodels.V1TenantEntity{
+		Metadata: &hapimodels.V1ObjectMeta{
 			Name: tenantName,
 		},
-		Spec: &models.V1TenantSpecEntity{
+		Spec: &hapimodels.V1TenantSpecEntity{
 			OrgName:   tenantName,
 			FirstName: "Lab",
 			LastName:  "Admin",
@@ -412,7 +417,7 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 		errMsg := fmt.Sprintf("Missing required configuration: host=%s, systemUsername=%s, systemPassword=%s",
 			hostStatus, usernameStatus, passwordStatus)
 		fmt.Printf("ERROR: %s\n", errMsg)
-		return fmt.Errorf(errMsg)
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	// Get lab-specific data from context
@@ -458,7 +463,7 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 	fmt.Printf("Cleaning up Palette Tenant resources for lab %s:\n", ctx.LabID)
 
 	// Delete Tenant (only if we found the tenant ID)
-	if tenantID != "" && tenantID != "TODO_TENANT_ID" {
+	if tenantID != "" && tenantID != PlaceholderTenantID {
 		fmt.Printf("- Deleting tenant: %s\n", tenantID)
 		if err := pc.DeleteTenant(tenantID); err != nil {
 			fmt.Printf("Warning: Failed to delete tenant: %v\n", err)

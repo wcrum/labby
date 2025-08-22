@@ -26,7 +26,7 @@ import { motion } from "framer-motion";
 import { LabSession } from "../lab/page";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { apiService } from "@/lib/api";
+import { apiService, ServiceUsage, ServiceConfig, ServiceLimit } from "@/lib/api";
 
 
 
@@ -133,6 +133,9 @@ function AdminPageContent() {
   const [cleanupProjectName, setCleanupProjectName] = useState("");
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [cleanupMessage, setCleanupMessage] = useState("");
+  const [serviceUsage, setServiceUsage] = useState<ServiceUsage[]>([]);
+  const [serviceConfigs, setServiceConfigs] = useState<ServiceConfig[]>([]);
+  const [serviceLimits, setServiceLimits] = useState<ServiceLimit[]>([]);
 
   // Get countdown data for all labs using a single hook
   const labCountdowns = useAllCountdowns(labs);
@@ -143,13 +146,21 @@ function AdminPageContent() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchAllLabSessions();
+        const [labsData, usageData, configsData, limitsData] = await Promise.all([
+          fetchAllLabSessions(),
+          apiService.getServiceUsage(),
+          apiService.getServiceConfigs(),
+          apiService.getServiceLimits()
+        ]);
         if (!live) return;
-        setLabs(data);
+        setLabs(labsData);
+        setServiceUsage(usageData);
+        setServiceConfigs(configsData);
+        setServiceLimits(limitsData);
       } catch (err) {
         if (!live) return;
-        console.error('Failed to fetch labs:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load labs');
+        console.error('Failed to fetch data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load data');
         setLabs([]);
       } finally {
         if (live) {
@@ -160,14 +171,18 @@ function AdminPageContent() {
     
     const poll = setInterval(async () => {
       try {
-        const data = await fetchAllLabSessions();
+        const [labsData, usageData] = await Promise.all([
+          fetchAllLabSessions(),
+          apiService.getServiceUsage()
+        ]);
         if (!live) return;
-        setLabs(data);
+        setLabs(labsData);
+        setServiceUsage(usageData);
         setError(null);
       } catch (err) {
         if (!live) return;
-        console.error('Failed to fetch labs during poll:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load labs');
+        console.error('Failed to fetch data during poll:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load data');
       }
     }, 10000); // Poll every 10 seconds for more responsive updates
     
@@ -323,6 +338,85 @@ function AdminPageContent() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Service Usage Section */}
+        <Card className="rounded-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Service Usage & Limits
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {serviceUsage.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {serviceUsage.map((usage) => {
+                    const config = serviceConfigs.find(c => c.id === usage.service_id);
+                    const limit = serviceLimits.find(l => l.service_id === usage.service_id);
+                    const usagePercentage = limit ? (usage.active_labs / limit.max_labs) * 100 : 0;
+                    const isNearLimit = usagePercentage >= 80;
+                    const isAtLimit = usagePercentage >= 100;
+
+                    return (
+                      <Card key={usage.service_id} className="p-4">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-medium text-sm">
+                                {config?.name || usage.service_id}
+                              </h4>
+                              <p className="text-xs text-muted-foreground">
+                                {config?.type || 'Unknown Type'}
+                              </p>
+                            </div>
+                            <Badge 
+                              variant={isAtLimit ? "destructive" : isNearLimit ? "secondary" : "default"}
+                              className="text-xs"
+                            >
+                              {usage.active_labs}/{limit?.max_labs || '∞'}
+                            </Badge>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Usage</span>
+                              <span className="font-medium">{usage.active_labs} active labs</span>
+                            </div>
+                            <Progress 
+                              value={Math.min(usagePercentage, 100)} 
+                              className={`h-2 ${isAtLimit ? 'bg-red-100' : isNearLimit ? 'bg-yellow-100' : ''}`}
+                            />
+                            {limit && (
+                              <div className="text-xs text-muted-foreground">
+                                Limit: {limit.max_labs} labs, {limit.max_duration} min duration
+                              </div>
+                            )}
+                            {isAtLimit && (
+                              <div className="text-xs text-red-600 font-medium">
+                                ⚠️ Service at capacity
+                              </div>
+                            )}
+                            {isNearLimit && !isAtLimit && (
+                              <div className="text-xs text-yellow-600 font-medium">
+                                ⚠️ Approaching limit
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No service usage data available</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Palette Project Cleanup Section */}
         <Card className="rounded-xl">

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"spectro-lab-backend/internal/interfaces"
+	"github.com/wcrum/labby/internal/interfaces"
 
 	"github.com/sethvargo/go-password/password"
 )

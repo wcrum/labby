@@ -1,0 +1,10 @@
+name: "Palette Tenant Lab"
+id: "palette-tenant-lab"
+description: "A lab environment with Palette Tenant user access."
+expiration_duration: "2h"
+owner: "admin@spectrocloud.com"
+created_at: "2025-01-18T23:28:50Z"
+services:
+  - name: "palette-tenant"
+    service_id: "palette-tenant-1"
+    description: "Palette Tenant user account access"

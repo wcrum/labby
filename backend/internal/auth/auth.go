@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"spectro-lab-backend/internal/models"
+	"github.com/wcrum/labby/internal/models"
 
 	"github.com/golang-jwt/jwt/v5"
 )

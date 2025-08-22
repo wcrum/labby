@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"spectro-lab-backend/internal/interfaces"
-	"spectro-lab-backend/internal/models"
+	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 )
 
 // GetLab retrieves a lab by ID

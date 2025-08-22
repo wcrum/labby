@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"spectro-lab-backend/internal/interfaces"
+	"github.com/wcrum/labby/internal/interfaces"
 
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"

@@ -126,3 +126,33 @@ func GetRemainingTime(expiresAt time.Time) time.Duration {
 	}
 	return expiresAt.Sub(time.Now())
 }
+
+// ServiceLimit represents a limit for a specific service
+type ServiceLimit struct {
+	ID          string    `json:"id" yaml:"id"`
+	ServiceID   string    `json:"service_id" yaml:"service_id"`     // Reference to ServiceConfig
+	MaxLabs     int       `json:"max_labs" yaml:"max_labs"`         // Maximum number of concurrent labs using this service
+	MaxDuration int       `json:"max_duration" yaml:"max_duration"` // Maximum duration in minutes
+	IsActive    bool      `json:"is_active" yaml:"is_active"`       // Whether this limit is currently active
+	CreatedAt   time.Time `json:"created_at" yaml:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" yaml:"updated_at"`
+}
+
+// ServiceConfig represents a preconfigured service configuration
+type ServiceConfig struct {
+	ID          string            `json:"id" yaml:"id"`
+	Name        string            `json:"name" yaml:"name"`
+	Type        string            `json:"type" yaml:"type"` // palette_project, palette_tenant, proxmox_user
+	Description string            `json:"description" yaml:"description"`
+	Config      map[string]string `json:"config" yaml:"config"`       // Service-specific configuration
+	IsActive    bool              `json:"is_active" yaml:"is_active"` // Whether this service config is available
+	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at" yaml:"updated_at"`
+}
+
+// ServiceUsage represents current usage of a service
+type ServiceUsage struct {
+	ServiceID  string `json:"service_id"`
+	ActiveLabs int    `json:"active_labs"`
+	Limit      int    `json:"limit"`
+}

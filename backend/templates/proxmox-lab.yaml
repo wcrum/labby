@@ -1,0 +1,10 @@
+name: "Proxmox Lab"
+id: "proxmox-lab"
+description: "A lab environment with Proxmox VE access."
+expiration_duration: "2h"
+owner: "admin@spectrocloud.com"
+created_at: "2025-01-18T23:28:50Z"
+services:
+  - name: "proxmox-user"
+    service_id: "proxmox-user-1"
+    description: "Proxmox VE cluster management access"

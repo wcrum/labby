@@ -1,0 +1,23 @@
+- id: "limit-palette-project-1"
+  service_id: "palette-project-1"
+  max_labs: 10
+  max_duration: 480
+  is_active: true
+  created_at: "2025-01-18T23:28:50Z"
+  updated_at: "2025-01-18T23:28:50Z"
+
+- id: "limit-palette-tenant-1"
+  service_id: "palette-tenant-1"
+  max_labs: 5
+  max_duration: 480
+  is_active: true
+  created_at: "2025-01-18T23:28:50Z"
+  updated_at: "2025-01-18T23:28:50Z"
+
+- id: "limit-proxmox-user-1"
+  service_id: "proxmox-user-1"
+  max_labs: 8
+  max_duration: 480
+  is_active: true
+  created_at: "2025-01-18T23:28:50Z"
+  updated_at: "2025-01-18T23:28:50Z"

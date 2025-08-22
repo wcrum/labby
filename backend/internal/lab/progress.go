@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+// Constants for progress tracking
+const (
+	MinLabDurationMinutes = 15
+	MaxLabDurationMinutes = 480
+	MaxLogEntries         = 50
+	ProgressComplete      = 100
+)
+
 // ProgressStep represents a step within a service
 type ProgressStep struct {
 	Name        string    `json:"name"`
@@ -204,8 +212,8 @@ func (pt *ProgressTracker) AddLog(labID, message string) {
 	progress.Logs = append(progress.Logs, logEntry)
 
 	// Keep only last 50 logs
-	if len(progress.Logs) > 50 {
-		progress.Logs = progress.Logs[len(progress.Logs)-50:]
+	if len(progress.Logs) > MaxLogEntries {
+		progress.Logs = progress.Logs[len(progress.Logs)-MaxLogEntries:]
 	}
 
 	progress.UpdatedAt = time.Now()
@@ -213,12 +221,75 @@ func (pt *ProgressTracker) AddLog(labID, message string) {
 
 // CompleteProgress marks the progress as complete
 func (pt *ProgressTracker) CompleteProgress(labID string) {
-	pt.UpdateServiceStep(labID, "Palette Project Service", "Creating Edge Tokens", "completed", "Lab setup completed successfully")
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	progress, exists := pt.progress[labID]
+	if !exists {
+		return
+	}
+
+	progress.mu.Lock()
+	defer progress.mu.Unlock()
+
+	// Mark all pending services as completed
+	for i, service := range progress.Services {
+		if service.Status == "pending" || service.Status == "running" {
+			progress.Services[i].Status = "completed"
+			progress.Services[i].CompletedAt = time.Now()
+
+			// Mark all pending steps as completed
+			for j, step := range service.Steps {
+				if step.Status == "pending" || step.Status == "running" {
+					progress.Services[i].Steps[j].Status = "completed"
+					progress.Services[i].Steps[j].Message = "Lab setup completed successfully"
+					progress.Services[i].Steps[j].CompletedAt = time.Now()
+				}
+			}
+
+			// Update service progress to 100%
+			progress.Services[i].Progress = ProgressComplete
+		}
+	}
+
+	// Update overall progress to 100%
+	progress.Overall = ProgressComplete
+	progress.CurrentStep = "Lab setup completed successfully"
+	progress.UpdatedAt = time.Now()
 }
 
 // FailProgress marks the progress as failed
 func (pt *ProgressTracker) FailProgress(labID, error string) {
-	pt.UpdateServiceStep(labID, "Palette Project Service", "Creating Edge Tokens", "failed", "Lab setup failed: "+error)
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+
+	progress, exists := pt.progress[labID]
+	if !exists {
+		return
+	}
+
+	progress.mu.Lock()
+	defer progress.mu.Unlock()
+
+	// Mark all pending services as failed
+	for i, service := range progress.Services {
+		if service.Status == "pending" || service.Status == "running" {
+			progress.Services[i].Status = "failed"
+			progress.Services[i].Error = error
+
+			// Mark all pending steps as failed
+			for j, step := range service.Steps {
+				if step.Status == "pending" || step.Status == "running" {
+					progress.Services[i].Steps[j].Status = "failed"
+					progress.Services[i].Steps[j].Message = "Lab setup failed: " + error
+					progress.Services[i].Steps[j].CompletedAt = time.Now()
+				}
+			}
+		}
+	}
+
+	progress.CurrentStep = "Lab setup failed: " + error
+	progress.UpdatedAt = time.Now()
 }
 
 // CleanupProgress removes progress data for a lab

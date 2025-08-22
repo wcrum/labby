@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"spectro-lab-backend/internal/models"
+	"github.com/wcrum/labby/internal/models"
 
 	"gopkg.in/yaml.v2"
 )
@@ -117,16 +117,8 @@ func (tl *TemplateLoader) validateTemplate(template *models.LabTemplate) error {
 			return fmt.Errorf("service %d name is required", i)
 		}
 
-		if service.Type == "" {
-			return fmt.Errorf("service %d type is required", i)
-		}
-
-		// Validate service type
-		switch service.Type {
-		case "palette", "proxmox", "proxmox_user", "palette_tenant", "generic":
-			// Valid service types
-		default:
-			return fmt.Errorf("unsupported service type: %s", service.Type)
+		if service.ServiceID == "" {
+			return fmt.Errorf("service %d service_id is required", i)
 		}
 	}
 
@@ -135,29 +127,41 @@ func (tl *TemplateLoader) validateTemplate(template *models.LabTemplate) error {
 
 // CreateLabFromTemplate creates a lab instance from a template
 func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*models.Lab, error) {
+	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Starting for template %s, owner %s\n", templateID, ownerID)
+
 	template, exists := tl.templateManager.GetTemplate(templateID)
 	if !exists {
+		fmt.Printf("TemplateLoader.CreateLabFromTemplate: Template %s not found\n", templateID)
 		return nil, fmt.Errorf("template not found: %s", templateID)
 	}
+	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Found template %s with %d services\n", templateID, len(template.Services))
 
 	// Parse duration
 	duration, err := time.ParseDuration(template.ExpirationDuration)
 	if err != nil {
+		fmt.Printf("TemplateLoader.CreateLabFromTemplate: Invalid duration %s: %v\n", template.ExpirationDuration, err)
 		return nil, fmt.Errorf("invalid duration in template: %w", err)
 	}
+	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Parsed duration: %v\n", duration)
 
 	// Create lab
 	now := time.Now()
 
-	// Extract service types from template for tracking
+	// Extract service IDs from template for tracking
 	usedServices := make([]string, 0, len(template.Services))
 	for _, service := range template.Services {
-		usedServices = append(usedServices, service.Type)
+		fmt.Printf("TemplateLoader.CreateLabFromTemplate: Adding service %s (ID: %s) to used services\n", service.Name, service.ServiceID)
+		usedServices = append(usedServices, service.ServiceID)
 	}
 
+	labID := models.GenerateID()
+	labName := models.GenerateLabName()
+
+	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Generated lab ID: %s, name: %s\n", labID, labName)
+
 	lab := &models.Lab{
-		ID:           models.GenerateID(),
-		Name:         models.GenerateLabName(), // Use short lab name instead of template name
+		ID:           labID,
+		Name:         labName,
 		Status:       models.LabStatusProvisioning,
 		OwnerID:      ownerID,
 		StartedAt:    now,
@@ -165,9 +169,10 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Credentials:  []models.Credential{},
-		TemplateID:   templateID,   // Store reference to template
-		UsedServices: usedServices, // Track which services will be used
+		TemplateID:   templateID,
+		UsedServices: usedServices,
 	}
 
+	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Lab created successfully with %d used services\n", len(usedServices))
 	return lab, nil
 }

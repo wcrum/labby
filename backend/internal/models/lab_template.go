@@ -6,16 +6,23 @@ import (
 
 // LabTemplate represents a lab template definition
 type LabTemplate struct {
-	Name               string            `yaml:"name" json:"name"`
-	ID                 string            `yaml:"id" json:"id"`
-	Description        string            `yaml:"description" json:"description"`
-	ExpirationDuration string            `yaml:"expiration_duration" json:"expiration_duration"`
-	Owner              string            `yaml:"owner" json:"owner"`
-	CreatedAt          time.Time         `yaml:"created_at" json:"created_at"`
-	Services           []ServiceTemplate `yaml:"services" json:"services"`
+	Name               string             `yaml:"name" json:"name"`
+	ID                 string             `yaml:"id" json:"id"`
+	Description        string             `yaml:"description" json:"description"`
+	ExpirationDuration string             `yaml:"expiration_duration" json:"expiration_duration"`
+	Owner              string             `yaml:"owner" json:"owner"`
+	CreatedAt          time.Time          `yaml:"created_at" json:"created_at"`
+	Services           []ServiceReference `yaml:"services" json:"services"`
 }
 
-// ServiceTemplate represents a service configuration in a lab template
+// ServiceReference represents a reference to a preconfigured service
+type ServiceReference struct {
+	Name        string `yaml:"name" json:"name"`
+	ServiceID   string `yaml:"service_id" json:"service_id"` // Reference to ServiceConfig
+	Description string `yaml:"description" json:"description"`
+}
+
+// ServiceTemplate represents a service configuration in a lab template (legacy, kept for backward compatibility)
 type ServiceTemplate struct {
 	Name        string            `yaml:"name" json:"name"`
 	Type        string            `yaml:"type" json:"type"`

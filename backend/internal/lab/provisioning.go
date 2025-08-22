@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"spectro-lab-backend/internal/models"
+	"github.com/wcrum/labby/internal/models"
 )
 
 // provisionLabFromTemplate handles lab provisioning from a template
@@ -25,23 +25,23 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Provisioning lab from template: %s", template.Name))
 
 	// Add services to progress tracker based on template
-	for _, serviceTemplate := range template.Services {
+	for _, serviceRef := range template.Services {
+		// Get the service configuration
+		serviceConfig, exists := s.serviceConfigManager.GetServiceConfig(serviceRef.ServiceID)
+		if !exists {
+			s.progressTracker.AddLog(labID, fmt.Sprintf("Service configuration not found: %s", serviceRef.ServiceID))
+			continue
+		}
+
 		var steps []string
-		switch serviceTemplate.Type {
-		case "palette":
+		switch serviceConfig.Type {
+		case "palette_project":
 			steps = []string{
 				"Creating Project",
 				"Setting up User Account",
 				"Configuring Access Permissions",
 				"Generating API Keys",
 				"Creating Edge Tokens",
-			}
-		case "proxmox":
-			steps = []string{
-				"Connecting to Cluster",
-				"Creating VM Pool",
-				"Configuring Network",
-				"Setting up Storage",
 			}
 		case "proxmox_user":
 			steps = []string{
@@ -55,37 +55,34 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 				"Creating User Account",
 				"Setting Password",
 			}
-		case "generic":
-			steps = []string{
-				"Initializing Service",
-				"Configuring Endpoints",
-				"Setting up Authentication",
-			}
 		default:
 			steps = []string{"Initializing"}
 		}
 
-		s.progressTracker.AddService(labID, serviceTemplate.Name, serviceTemplate.Description, steps)
+		s.progressTracker.AddService(labID, serviceConfig.Name, serviceRef.Description, steps)
 	}
 
 	// Provision each service defined in the template
 	hasFailures := false
-	for _, serviceTemplate := range template.Services {
-		s.progressTracker.AddLog(labID, fmt.Sprintf("Setting up service: %s (%s)", serviceTemplate.Name, serviceTemplate.Type))
+	for _, serviceRef := range template.Services {
+		// Get the service configuration
+		serviceConfig, exists := s.serviceConfigManager.GetServiceConfig(serviceRef.ServiceID)
+		if !exists {
+			s.progressTracker.AddLog(labID, fmt.Sprintf("Service configuration not found: %s", serviceRef.ServiceID))
+			continue
+		}
 
-		switch serviceTemplate.Type {
-		case "palette":
-			s.provisionPaletteService(labID, serviceTemplate)
-		case "proxmox":
-			s.provisionGenericService(labID, serviceTemplate)
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Setting up service: %s (%s)", serviceRef.Name, serviceConfig.Type))
+
+		switch serviceConfig.Type {
+		case "palette_project":
+			s.provisionPaletteService(labID, serviceConfig)
 		case "proxmox_user":
-			s.provisionProxmoxUserService(labID, serviceTemplate)
+			s.provisionProxmoxUserService(labID, serviceConfig)
 		case "palette_tenant":
-			s.provisionPaletteTenantService(labID, serviceTemplate)
-		case "generic":
-			s.provisionGenericService(labID, serviceTemplate)
+			s.provisionPaletteTenantService(labID, serviceConfig)
 		default:
-			s.progressTracker.AddLog(labID, fmt.Sprintf("Unknown service type: %s", serviceTemplate.Type))
+			s.progressTracker.AddLog(labID, fmt.Sprintf("Unknown service type: %s", serviceConfig.Type))
 		}
 
 		// Check if the lab status is now error (indicating a failure)

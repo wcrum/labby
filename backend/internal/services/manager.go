@@ -2,31 +2,55 @@ package services
 
 import (
 	"fmt"
-	"spectro-lab-backend/internal/interfaces"
+
+	"github.com/wcrum/labby/internal/interfaces"
 )
 
 // ServiceManager manages all available services
 type ServiceManager struct {
 	registry *interfaces.ServiceRegistry
+	// Map Service Config IDs to service instances
+	serviceConfigMap map[string]interfaces.Service
 }
 
 // NewServiceManager creates a new service manager
 func NewServiceManager() *ServiceManager {
 	registry := interfaces.NewServiceRegistry()
 
-	// Register all available services
-	registry.RegisterService(NewPaletteProjectService())
-	registry.RegisterService(NewProxmoxUserService())
-	registry.RegisterService(NewPaletteTenantService())
+	// Create service instances
+	paletteProjectService := NewPaletteProjectService()
+	proxmoxUserService := NewProxmoxUserService()
+	paletteTenantService := NewPaletteTenantService()
+
+	// Register services with their GetName() for backward compatibility
+	registry.RegisterService(paletteProjectService)
+	registry.RegisterService(proxmoxUserService)
+	registry.RegisterService(paletteTenantService)
+
+	// Create mapping from Service Config IDs to service instances
+	serviceConfigMap := make(map[string]interfaces.Service)
+
+	// Map known Service Config IDs to their corresponding services
+	// This mapping should be updated when new service configs are added
+	serviceConfigMap["palette-project-1"] = paletteProjectService
+	serviceConfigMap["proxmox-user-1"] = proxmoxUserService
+	serviceConfigMap["palette-tenant-1"] = paletteTenantService
 
 	return &ServiceManager{
-		registry: registry,
+		registry:         registry,
+		serviceConfigMap: serviceConfigMap,
 	}
 }
 
 // GetRegistry returns the service registry
 func (sm *ServiceManager) GetRegistry() *interfaces.ServiceRegistry {
 	return sm.registry
+}
+
+// GetServiceByConfigID returns a service by its Service Config ID
+func (sm *ServiceManager) GetServiceByConfigID(configID string) (interfaces.Service, bool) {
+	service, exists := sm.serviceConfigMap[configID]
+	return service, exists
 }
 
 // SetupLabServices sets up all services for a lab
@@ -68,17 +92,22 @@ func (sm *ServiceManager) CleanupLabServices(ctx *interfaces.CleanupContext) err
 
 	// Only clean up services that were actually used for this lab
 	fmt.Printf("Cleaning up only services that were used for this lab\n")
-	for _, serviceName := range ctx.Lab.UsedServices {
-		service, exists := sm.registry.GetService(serviceName)
+	for _, serviceConfigID := range ctx.Lab.UsedServices {
+		// First try to get service by Service Config ID
+		service, exists := sm.GetServiceByConfigID(serviceConfigID)
 		if !exists {
-			// Log warning but continue with other services
-			fmt.Printf("Warning: Service %s not found in registry during cleanup for lab %s\n", serviceName, ctx.LabID)
-			continue
+			// Fallback to registry lookup (for backward compatibility)
+			service, exists = sm.registry.GetService(serviceConfigID)
+			if !exists {
+				// Log warning but continue with other services
+				fmt.Printf("Warning: Service %s not found in registry during cleanup for lab %s\n", serviceConfigID, ctx.LabID)
+				continue
+			}
 		}
 
-		fmt.Printf("Cleaning up service: %s\n", serviceName)
+		fmt.Printf("Cleaning up service: %s (config ID: %s)\n", service.GetName(), serviceConfigID)
 		if err := service.ExecuteCleanup(ctx); err != nil {
-			fmt.Printf("Error cleaning up service %s: %v\n", serviceName, err)
+			fmt.Printf("Error cleaning up service %s: %v\n", serviceConfigID, err)
 			return err
 		}
 	}

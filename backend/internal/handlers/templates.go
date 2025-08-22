@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
-	"spectro-lab-backend/internal/models"
+
+	"github.com/wcrum/labby/internal/models"
 
 	"github.com/gin-gonic/gin"
 )
@@ -65,25 +67,34 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /templates/{id}/create-lab [post]
 func (h *Handler) CreateLabFromTemplate(c *gin.Context) {
+	fmt.Printf("CreateLabFromTemplate handler: Starting lab creation from template\n")
+
 	templateID := c.Param("id")
 	if templateID == "" {
+		fmt.Printf("CreateLabFromTemplate handler: Template ID is empty\n")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Template ID is required"})
 		return
 	}
+	fmt.Printf("CreateLabFromTemplate handler: Template ID: %s\n", templateID)
 
 	user, exists := c.Get("user")
 	if !exists {
+		fmt.Printf("CreateLabFromTemplate handler: User not found in context\n")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
 		return
 	}
 
 	userObj := user.(*models.User)
+	fmt.Printf("CreateLabFromTemplate handler: User: %s (%s)\n", userObj.Email, userObj.ID)
+
 	lab, err := h.labService.CreateLabFromTemplate(templateID, userObj.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create lab from template"})
+		fmt.Printf("CreateLabFromTemplate handler: Failed to create lab: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to create lab from template: %v", err)})
 		return
 	}
 
+	fmt.Printf("CreateLabFromTemplate handler: Lab created successfully with ID: %s\n", lab.ID)
 	c.JSON(http.StatusCreated, lab)
 }
 

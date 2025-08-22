@@ -2,8 +2,9 @@ package interfaces
 
 import (
 	"context"
-	"spectro-lab-backend/internal/models"
 	"time"
+
+	"github.com/wcrum/labby/internal/models"
 )
 
 // Credential represents a credential that can be added during setup

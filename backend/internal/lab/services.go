@@ -6,18 +6,18 @@ import (
 	"os"
 	"time"
 
-	"spectro-lab-backend/internal/interfaces"
-	"spectro-lab-backend/internal/models"
-	"spectro-lab-backend/internal/services"
+	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
+	"github.com/wcrum/labby/internal/services"
 )
 
 // provisionPaletteService provisions a Palette service using the real Palette Project service
-func (s *Service) provisionPaletteService(labID string, serviceTemplate models.ServiceTemplate) {
-	// Set environment variables from template config
-	if host, ok := serviceTemplate.Config["host"]; ok {
+func (s *Service) provisionPaletteService(labID string, serviceConfig *models.ServiceConfig) {
+	// Set environment variables from service config
+	if host, ok := serviceConfig.Config["host"]; ok {
 		os.Setenv("PALETTE_HOST", host)
 	}
-	if apiKey, ok := serviceTemplate.Config["api_key"]; ok {
+	if apiKey, ok := serviceConfig.Config["api_key"]; ok {
 		os.Setenv("PALETTE_API_KEY", apiKey)
 	}
 
@@ -30,7 +30,7 @@ func (s *Service) provisionPaletteService(labID string, serviceTemplate models.S
 	s.mu.Unlock()
 
 	if !exists {
-		s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Creating Project", "failed", "Lab not found")
+		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating Project", "failed", "Lab not found")
 		return
 	}
 
@@ -64,7 +64,7 @@ func (s *Service) provisionPaletteService(labID string, serviceTemplate models.S
 			return nil
 		},
 		UpdateProgress: func(stepName, status, message string) {
-			s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, stepName, status, message)
+			s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, stepName, status, message)
 		},
 	}
 
@@ -87,34 +87,19 @@ func (s *Service) provisionPaletteService(labID string, serviceTemplate models.S
 	s.progressTracker.AddLog(labID, "Palette Project service setup completed successfully")
 }
 
-// provisionGenericService provisions a generic service
-func (s *Service) provisionGenericService(labID string, serviceTemplate models.ServiceTemplate) {
-	s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Initializing Service", "running", "Initializing generic service...")
-	time.Sleep(400 * time.Millisecond)
-	s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Initializing Service", "completed", "Service initialized")
-
-	s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Configuring Endpoints", "running", "Configuring service endpoints...")
-	time.Sleep(300 * time.Millisecond)
-	s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Configuring Endpoints", "completed", "Endpoints configured")
-
-	s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Setting up Authentication", "running", "Setting up authentication...")
-	time.Sleep(500 * time.Millisecond)
-	s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Setting up Authentication", "completed", "Authentication configured")
-}
-
 // provisionProxmoxUserService provisions a Proxmox user service using the real Proxmox User service
-func (s *Service) provisionProxmoxUserService(labID string, serviceTemplate models.ServiceTemplate) {
-	// Set environment variables from template config
-	if uri, ok := serviceTemplate.Config["uri"]; ok {
+func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *models.ServiceConfig) {
+	// Set environment variables from service config
+	if uri, ok := serviceConfig.Config["uri"]; ok {
 		os.Setenv("PROXMOX_URI", uri)
 	}
-	if adminUser, ok := serviceTemplate.Config["admin_user"]; ok {
+	if adminUser, ok := serviceConfig.Config["admin_user"]; ok {
 		os.Setenv("PROXMOX_ADMIN_USER", adminUser)
 	}
-	if adminPass, ok := serviceTemplate.Config["admin_pass"]; ok {
+	if adminPass, ok := serviceConfig.Config["admin_pass"]; ok {
 		os.Setenv("PROXMOX_ADMIN_PASS", adminPass)
 	}
-	if skipTLSVerify, ok := serviceTemplate.Config["skip_tls_verify"]; ok {
+	if skipTLSVerify, ok := serviceConfig.Config["skip_tls_verify"]; ok {
 		os.Setenv("PROXMOX_SKIP_TLS_VERIFY", skipTLSVerify)
 	}
 
@@ -127,7 +112,7 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceTemplate mode
 	s.mu.Unlock()
 
 	if !exists {
-		s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Creating User", "failed", "Lab not found")
+		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
 
@@ -161,7 +146,7 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceTemplate mode
 			return nil
 		},
 		UpdateProgress: func(stepName, status, message string) {
-			s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, stepName, status, message)
+			s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, stepName, status, message)
 		},
 	}
 
@@ -185,36 +170,36 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceTemplate mode
 }
 
 // provisionPaletteTenantService provisions a Palette Tenant service using the real Palette Tenant service
-func (s *Service) provisionPaletteTenantService(labID string, serviceTemplate models.ServiceTemplate) {
+func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *models.ServiceConfig) {
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Starting Palette Tenant service setup for lab %s", labID))
 
-	// Set environment variables from template config with comprehensive logging
-	s.progressTracker.AddLog(labID, "Setting up environment variables from template config...")
+	// Set environment variables from service config with comprehensive logging
+	s.progressTracker.AddLog(labID, "Setting up environment variables from service config...")
 
-	if host, ok := serviceTemplate.Config["palette_host"]; ok {
+	if host, ok := serviceConfig.Config["palette_host"]; ok {
 		os.Setenv("palette_host", host)
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Set palette_host: %s", host))
 	} else {
-		s.progressTracker.AddLog(labID, "Warning: palette_host not found in template config")
+		s.progressTracker.AddLog(labID, "Warning: palette_host not found in service config")
 	}
 
-	if systemUsername, ok := serviceTemplate.Config["palette_system_username"]; ok {
+	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
 		os.Setenv("palette_system_username", systemUsername)
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Set palette_system_username: %s", systemUsername))
 	} else {
-		s.progressTracker.AddLog(labID, "Warning: palette_system_username not found in template config")
+		s.progressTracker.AddLog(labID, "Warning: palette_system_username not found in service config")
 	}
 
-	if systemPassword, ok := serviceTemplate.Config["palette_system_password"]; ok {
+	if systemPassword, ok := serviceConfig.Config["palette_system_password"]; ok {
 		os.Setenv("palette_system_password", systemPassword)
 		s.progressTracker.AddLog(labID, "Set palette_system_password: [REDACTED]")
 	} else {
-		s.progressTracker.AddLog(labID, "Warning: palette_system_password not found in template config")
+		s.progressTracker.AddLog(labID, "Warning: palette_system_password not found in service config")
 	}
 
 	// Log all available config keys for debugging
-	configKeys := make([]string, 0, len(serviceTemplate.Config))
-	for key := range serviceTemplate.Config {
+	configKeys := make([]string, 0, len(serviceConfig.Config))
+	for key := range serviceConfig.Config {
 		configKeys = append(configKeys, key)
 	}
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Available config keys: %v", configKeys))
@@ -234,7 +219,7 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceTemplate mo
 	s.mu.Unlock()
 
 	if !exists {
-		s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, "Creating User", "failed", "Lab not found")
+		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
 
@@ -268,15 +253,15 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceTemplate mo
 			return nil
 		},
 		UpdateProgress: func(stepName, status, message string) {
-			s.progressTracker.UpdateServiceStep(labID, serviceTemplate.Name, stepName, status, message)
+			s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, stepName, status, message)
 		},
 	}
 
 	// Execute the real setup - services will update their own progress
 	err := paletteTenantService.ExecuteSetup(setupCtx)
 	if err != nil {
-		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette tenant setup failed: %v", err))
-		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette tenant setup failed: %v", err))
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Tenant setup failed: %v", err))
+		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette Tenant setup failed: %v", err))
 
 		// Set lab status to error
 		s.mu.Lock()
@@ -288,6 +273,5 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceTemplate mo
 		return
 	}
 
-	s.progressTracker.AddLog(labID, "Palette tenant user created successfully")
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Tenant service setup completed successfully for lab %s", labID))
+	s.progressTracker.AddLog(labID, "Palette Tenant service setup completed successfully")
 }
