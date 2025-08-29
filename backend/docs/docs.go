@@ -38,7 +38,7 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "Get all labs (Admin)",
+                "summary": "Get all labs (admin)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -62,6 +62,13 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -73,14 +80,11 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Delete any lab in the system (admin only)",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Delete a lab by ID (admin only)",
                 "tags": [
                     "admin"
                 ],
-                "summary": "Delete lab (Admin)",
+                "summary": "Delete lab (admin)",
                 "parameters": [
                     {
                         "type": "string",
@@ -91,19 +95,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Lab deleted successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
+                    "204": {
+                        "description": "No content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -121,6 +114,13 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Lab not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -136,14 +136,11 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Cleanup resources for a specific lab (admin only)",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Clean up a lab by ID (admin only)",
                 "tags": [
                     "admin"
                 ],
-                "summary": "Cleanup lab (Admin)",
+                "summary": "Cleanup lab (admin)",
                 "parameters": [
                     {
                         "type": "string",
@@ -155,14 +152,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Lab cleanup completed successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
+                        "description": "Cleanup successful",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -184,6 +174,13 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Lab not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -199,14 +196,11 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Stop any lab in the system (admin only)",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Stop a lab by ID (admin only)",
                 "tags": [
                     "admin"
                 ],
-                "summary": "Stop lab (Admin)",
+                "summary": "Stop lab (admin)",
                 "parameters": [
                     {
                         "type": "string",
@@ -218,17 +212,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Lab stopped successfully",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/models.Lab"
                         }
                     },
                     "401": {
@@ -251,6 +237,13 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -262,7 +255,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Cleanup a palette project directly (admin only)",
+                "description": "Clean up a Palette Project by project name (admin only)",
                 "consumes": [
                     "application/json"
                 ],
@@ -272,21 +265,24 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "Cleanup palette project (Admin)",
+                "summary": "Cleanup Palette Project by name (admin)",
                 "parameters": [
                     {
-                        "description": "Project cleanup data",
+                        "description": "Project cleanup request",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Palette Project cleanup completed",
+                        "description": "Cleanup successful",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -308,6 +304,392 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/service-configs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all service configurations (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get service configurations",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ServiceConfig"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new service configuration (admin only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create service configuration",
+                "parameters": [
+                    {
+                        "description": "Service configuration",
+                        "name": "config",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceConfig"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceConfig"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/service-configs/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an existing service configuration (admin only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update service configuration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service configuration ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service configuration",
+                        "name": "config",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceConfig"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceConfig"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a service configuration (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete service configuration",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service configuration ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/admin/service-limits": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all service limits (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get service limits",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ServiceLimit"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new service limit (admin only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create service limit",
+                "parameters": [
+                    {
+                        "description": "Service limit",
+                        "name": "limit",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceLimit"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceLimit"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/service-limits/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update an existing service limit (admin only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update service limit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service limit ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Service limit",
+                        "name": "limit",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceLimit"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ServiceLimit"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a service limit (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete service limit",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Service limit ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/admin/service-usage": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get current usage information for all services (admin only)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get service usage",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.ServiceUsage"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/templates/load": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Load lab templates from a directory (admin only)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Load lab templates (admin)",
+                "parameters": [
+                    {
+                        "description": "Directory path",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Templates loaded",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -330,7 +712,7 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "Get all users (Admin)",
+                "summary": "Get all users (admin)",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -354,6 +736,13 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             },
@@ -373,10 +762,10 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "Create user (Admin)",
+                "summary": "Create user (admin)",
                 "parameters": [
                     {
-                        "description": "User creation data",
+                        "description": "User creation request",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -412,6 +801,13 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
@@ -423,14 +819,11 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Delete a user (admin only)",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Delete a user by ID (admin only)",
                 "tags": [
                     "admin"
                 ],
-                "summary": "Delete user (Admin)",
+                "summary": "Delete user (admin)",
                 "parameters": [
                     {
                         "type": "string",
@@ -441,19 +834,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "User deleted successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
+                    "204": {
+                        "description": "No content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -464,6 +846,20 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -489,7 +885,7 @@ const docTemplate = `{
                 "tags": [
                     "admin"
                 ],
-                "summary": "Update user role (Admin)",
+                "summary": "Update user role (admin)",
                 "parameters": [
                     {
                         "type": "string",
@@ -499,21 +895,23 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Role update data",
+                        "description": "Role update request",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object"
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
                         }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "User role updated successfully",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/models.User"
                         }
                     },
                     "400": {
@@ -532,6 +930,20 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "User not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -648,7 +1060,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get all labs owned by the authenticated user",
+                "description": "Get all labs for the authenticated user",
                 "produces": [
                     "application/json"
                 ],
@@ -662,8 +1074,66 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.LabResponse"
+                                "$ref": "#/definitions/models.Lab"
                             }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create a new lab session",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "labs"
+                ],
+                "summary": "Create lab",
+                "parameters": [
+                    {
+                        "description": "Lab creation request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateLabRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/models.Lab"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "401": {
@@ -714,8 +1184,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.LabResponse"
                         }
                     },
-                    "400": {
-                        "description": "Bad request",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -723,6 +1193,13 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Lab not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -736,10 +1213,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Delete a lab owned by the authenticated user",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Delete a lab by ID",
                 "tags": [
                     "labs"
                 ],
@@ -754,19 +1228,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "Lab deleted successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
+                    "204": {
+                        "description": "No content"
                     },
                     "401": {
                         "description": "Unauthorized",
@@ -775,15 +1238,15 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "404": {
+                        "description": "Lab not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
-                    "404": {
-                        "description": "Lab not found",
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -799,10 +1262,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Cleanup resources for a failed lab (user can cleanup their own failed labs)",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Clean up a lab that has failed to provision",
                 "tags": [
                     "labs"
                 ],
@@ -818,14 +1278,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Lab cleanup completed successfully",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
+                        "description": "Cleanup successful",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -838,8 +1291,54 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "404": {
+                        "description": "Lab not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/labs/{id}/cleanup/palette-project": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Clean up a specific Palette Project service",
+                "tags": [
+                    "labs"
+                ],
+                "summary": "Cleanup Palette Project",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Lab ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Cleanup successful",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -847,6 +1346,13 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Lab not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -862,7 +1368,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Get the progress information for a specific lab",
+                "description": "Get the progress of a lab's provisioning",
                 "produces": [
                     "application/json"
                 ],
@@ -886,15 +1392,22 @@ const docTemplate = `{
                             "$ref": "#/definitions/lab.LabProgress"
                         }
                     },
-                    "400": {
-                        "description": "Bad request",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
                     "404": {
-                        "description": "Progress not found",
+                        "description": "Lab not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -910,10 +1423,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Stop a lab owned by the authenticated user",
-                "produces": [
-                    "application/json"
-                ],
+                "description": "Stop a lab by ID (marks it as expired)",
                 "tags": [
                     "labs"
                 ],
@@ -929,17 +1439,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Lab stopped successfully",
+                        "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/models.Lab"
                         }
                     },
                     "401": {
@@ -949,15 +1451,15 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
-                    "403": {
-                        "description": "Forbidden",
+                    "404": {
+                        "description": "Lab not found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
-                    "404": {
-                        "description": "Lab not found",
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -989,6 +1491,20 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/models.LabTemplate"
                             }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -1025,8 +1541,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.LabTemplate"
                         }
                     },
-                    "400": {
-                        "description": "Bad request",
+                    "401": {
+                        "description": "Unauthorized",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1038,18 +1554,28 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
                     }
                 }
             }
         },
-        "/templates/{id}/labs": {
+        "/templates/{id}/create-lab": {
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new lab instance from a template",
+                "description": "Create a new lab from a specific template",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1082,6 +1608,20 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Template not found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1177,6 +1717,28 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/lab.ProgressStep"
                     }
+                }
+            }
+        },
+        "models.CreateLabRequest": {
+            "type": "object",
+            "required": [
+                "duration",
+                "owner_id"
+            ],
+            "properties": {
+                "duration": {
+                    "description": "Duration in minutes",
+                    "type": "integer",
+                    "maximum": 480,
+                    "minimum": 15
+                },
+                "name": {
+                    "description": "Optional, will generate UUID if not provided",
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "string"
                 }
             }
         },
@@ -1285,6 +1847,13 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                },
+                "used_services": {
+                    "description": "Track which services were used for this lab",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -1356,7 +1925,7 @@ const docTemplate = `{
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.ServiceTemplate"
+                        "$ref": "#/definitions/models.ServiceReference"
                     }
                 }
             }
@@ -1383,22 +1952,96 @@ const docTemplate = `{
                 }
             }
         },
-        "models.ServiceTemplate": {
+        "models.ServiceConfig": {
             "type": "object",
             "properties": {
                 "config": {
+                    "description": "Service-specific configuration",
                     "type": "object",
                     "additionalProperties": {
                         "type": "string"
                     }
                 },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "description": "Whether this service config is available",
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "palette_project, palette_tenant, proxmox_user",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ServiceLimit": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_active": {
+                    "description": "Whether this limit is currently active",
+                    "type": "boolean"
+                },
+                "max_duration": {
+                    "description": "Maximum duration in minutes",
+                    "type": "integer"
+                },
+                "max_labs": {
+                    "description": "Maximum number of concurrent labs using this service",
+                    "type": "integer"
+                },
+                "service_id": {
+                    "description": "Reference to ServiceConfig",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.ServiceReference": {
+            "type": "object",
+            "properties": {
                 "description": {
                     "type": "string"
                 },
                 "name": {
                     "type": "string"
                 },
-                "type": {
+                "service_id": {
+                    "description": "Reference to ServiceConfig",
+                    "type": "string"
+                }
+            }
+        },
+        "models.ServiceUsage": {
+            "type": "object",
+            "properties": {
+                "active_labs": {
+                    "type": "integer"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "service_id": {
                     "type": "string"
                 }
             }

@@ -6,8 +6,5 @@ owner: "admin@spectrocloud.com"
 created_at: "2025-01-18T23:28:50Z"
 services:
   - name: "palette-project"
-    type: "palette"
+    service_id: "palette-project-1"
     description: "Spectro Cloud control plane access"
-    config:
-      host: "training.spectroclod.com"
-      api_key: "api-key"

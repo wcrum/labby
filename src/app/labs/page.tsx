@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
-import { Clock, Server, Users, Zap } from 'lucide-react';
+import { Clock, Server, Users, Zap, Cloud, Database } from 'lucide-react';
 import { apiService, LabTemplate } from '@/lib/api';
 import { AppLayout } from '@/components/layout/AppLayout';
 
@@ -57,12 +57,16 @@ export default function LabsPage() {
     return `${hours} hour${hours > 1 ? 's' : ''}`;
   };
 
-  const getServiceIcon = (type: string) => {
+  const getServiceIcon = (type?: string) => {
     switch (type) {
-      case 'palette':
-        return <Server className="h-4 w-4" />;
-      case 'proxmox':
+      case 'palette_project':
+        return <Cloud className="h-4 w-4" />;
+      case 'palette_tenant':
+        return <Users className="h-4 w-4" />;
+      case 'proxmox_user':
         return <Zap className="h-4 w-4" />;
+      case 'terraform_cloud':
+        return <Database className="h-4 w-4" />;
       default:
         return <Server className="h-4 w-4" />;
     }
@@ -136,9 +140,6 @@ export default function LabsPage() {
                       <div key={index} className="flex items-center gap-2 text-sm">
                         {getServiceIcon(service.type)}
                         <span>{service.name}</span>
-                        <Badge variant="secondary" className="text-xs">
-                          {service.type}
-                        </Badge>
                       </div>
                     ))}
                   </div>

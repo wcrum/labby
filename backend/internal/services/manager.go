@@ -21,11 +21,13 @@ func NewServiceManager() *ServiceManager {
 	paletteProjectService := NewPaletteProjectService()
 	proxmoxUserService := NewProxmoxUserService()
 	paletteTenantService := NewPaletteTenantService()
+	terraformCloudService := NewTerraformCloudService()
 
 	// Register services with their GetName() for backward compatibility
 	registry.RegisterService(paletteProjectService)
 	registry.RegisterService(proxmoxUserService)
 	registry.RegisterService(paletteTenantService)
+	registry.RegisterService(terraformCloudService)
 
 	// Create mapping from Service Config IDs to service instances
 	serviceConfigMap := make(map[string]interfaces.Service)
@@ -35,6 +37,9 @@ func NewServiceManager() *ServiceManager {
 	serviceConfigMap["palette-project-1"] = paletteProjectService
 	serviceConfigMap["proxmox-user-1"] = proxmoxUserService
 	serviceConfigMap["palette-tenant-1"] = paletteTenantService
+	serviceConfigMap["terraform-cloud-1"] = terraformCloudService
+	serviceConfigMap["terraform-cloud-aws-1"] = terraformCloudService
+	serviceConfigMap["terraform-cloud-example-1"] = terraformCloudService
 
 	return &ServiceManager{
 		registry:         registry,

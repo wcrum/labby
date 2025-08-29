@@ -20,6 +20,7 @@ type ServiceReference struct {
 	Name        string `yaml:"name" json:"name"`
 	ServiceID   string `yaml:"service_id" json:"service_id"` // Reference to ServiceConfig
 	Description string `yaml:"description" json:"description"`
+	Type        string `yaml:"type" json:"type,omitempty"` // Service type (enriched from ServiceConfig)
 }
 
 // ServiceTemplate represents a service configuration in a lab template (legacy, kept for backward compatibility)
@@ -62,7 +63,14 @@ func (ltm *LabTemplateManager) GetAllTemplates() []*LabTemplate {
 	return templates
 }
 
-// RemoveTemplate removes a lab template
-func (ltm *LabTemplateManager) RemoveTemplate(id string) {
-	delete(ltm.templates, id)
+// EnrichTemplatesWithServiceTypes enriches all templates with service type information
+func (ltm *LabTemplateManager) EnrichTemplatesWithServiceTypes(serviceConfigManager *ServiceConfigManager) {
+	for _, template := range ltm.templates {
+		for i := range template.Services {
+			serviceRef := &template.Services[i]
+			if serviceConfig, exists := serviceConfigManager.GetServiceConfig(serviceRef.ServiceID); exists {
+				serviceRef.Type = serviceConfig.Type
+			}
+		}
+	}
 }

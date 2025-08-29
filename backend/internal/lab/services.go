@@ -89,22 +89,11 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 
 // provisionProxmoxUserService provisions a Proxmox user service using the real Proxmox User service
 func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *models.ServiceConfig) {
-	// Set environment variables from service config
-	if uri, ok := serviceConfig.Config["uri"]; ok {
-		os.Setenv("PROXMOX_URI", uri)
-	}
-	if adminUser, ok := serviceConfig.Config["admin_user"]; ok {
-		os.Setenv("PROXMOX_ADMIN_USER", adminUser)
-	}
-	if adminPass, ok := serviceConfig.Config["admin_pass"]; ok {
-		os.Setenv("PROXMOX_ADMIN_PASS", adminPass)
-	}
-	if skipTLSVerify, ok := serviceConfig.Config["skip_tls_verify"]; ok {
-		os.Setenv("PROXMOX_SKIP_TLS_VERIFY", skipTLSVerify)
-	}
-
 	// Create Proxmox User service instance
 	proxmoxUserService := services.NewProxmoxUserService()
+
+	// Configure the service from the service configuration
+	proxmoxUserService.ConfigureFromServiceConfig(serviceConfig.Config)
 
 	// Get lab for context
 	s.mu.Lock()
@@ -274,4 +263,89 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	}
 
 	s.progressTracker.AddLog(labID, "Palette Tenant service setup completed successfully")
+}
+
+// provisionTerraformCloudService provisions a Terraform Cloud service
+func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *models.ServiceConfig) {
+	// Set environment variables from service config
+	if host, ok := serviceConfig.Config["host"]; ok {
+		os.Setenv("TF_CLOUD_HOST", host)
+	}
+	if apiToken, ok := serviceConfig.Config["api_token"]; ok {
+		os.Setenv("TF_CLOUD_API_TOKEN", apiToken)
+	}
+	if organization, ok := serviceConfig.Config["organization"]; ok {
+		os.Setenv("TF_CLOUD_ORGANIZATION", organization)
+	}
+
+	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", os.Getenv("TF_CLOUD_HOST")))
+	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", os.Getenv("TF_CLOUD_ORGANIZATION")))
+
+	// Get lab for context
+	s.mu.Lock()
+	lab, exists := s.labs[labID]
+	s.mu.Unlock()
+
+	if !exists {
+		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating Workspace", "failed", "Lab not found")
+		return
+	}
+
+	// Create setup context
+	setupCtx := &interfaces.SetupContext{
+		LabID:    labID,
+		LabName:  lab.Name,
+		Duration: int(time.Until(lab.EndsAt).Minutes()),
+		OwnerID:  lab.OwnerID,
+		Context:  context.Background(),
+		Lab:      lab,
+		AddCredential: func(credential *interfaces.Credential) error {
+			// Convert to models.Credential and add to lab
+			cred := models.Credential{
+				ID:        credential.ID,
+				LabID:     credential.LabID,
+				Label:     credential.Label,
+				Username:  credential.Username,
+				Password:  credential.Password,
+				URL:       credential.URL,
+				ExpiresAt: credential.ExpiresAt,
+				Notes:     credential.Notes,
+				CreatedAt: credential.CreatedAt,
+				UpdatedAt: credential.UpdatedAt,
+			}
+
+			s.mu.Lock()
+			lab.Credentials = append(lab.Credentials, cred)
+			s.mu.Unlock()
+
+			return nil
+		},
+		UpdateProgress: func(stepName, status, message string) {
+			s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, stepName, status, message)
+		},
+	}
+
+	// Create Terraform Cloud service instance
+	terraformCloudService := services.NewTerraformCloudService()
+
+	// Configure the service from the service configuration
+	terraformCloudService.ConfigureFromServiceConfig(serviceConfig.Config, labID)
+
+	// Execute the real setup - services will update their own progress
+	err := terraformCloudService.ExecuteSetup(setupCtx)
+	if err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup failed: %v", err))
+		s.progressTracker.FailProgress(labID, fmt.Sprintf("Terraform Cloud setup failed: %v", err))
+
+		// Set lab status to error
+		s.mu.Lock()
+		if lab, exists := s.labs[labID]; exists {
+			lab.Status = models.LabStatusError
+			lab.UpdatedAt = time.Now()
+		}
+		s.mu.Unlock()
+		return
+	}
+
+	s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup completed for lab %s", lab.Name))
 }

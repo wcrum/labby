@@ -35,6 +35,22 @@ func NewProxmoxUserService() *ProxmoxUserService {
 	}
 }
 
+// ConfigureFromServiceConfig configures the service from a service configuration
+func (v *ProxmoxUserService) ConfigureFromServiceConfig(config map[string]string) {
+	if uri, ok := config["uri"]; ok {
+		v.uri = uri
+	}
+	if adminUser, ok := config["admin_user"]; ok {
+		v.adminUser = adminUser
+	}
+	if adminPass, ok := config["admin_pass"]; ok {
+		v.adminPass = adminPass
+	}
+	if skipTLSVerify, ok := config["skip_tls_verify"]; ok {
+		v.skipTLSVerify = skipTLSVerify == "true"
+	}
+}
+
 // GetName returns the service name
 func (v *ProxmoxUserService) GetName() string {
 	return "proxmox_user"
@@ -42,7 +58,7 @@ func (v *ProxmoxUserService) GetName() string {
 
 // GetDescription returns the service description
 func (v *ProxmoxUserService) GetDescription() string {
-	return "Proxmox VE user account access"
+	return "Proxmox VE user account access and resource pool"
 }
 
 // GetRequiredParams returns the required parameters for this service
@@ -228,6 +244,67 @@ func (pc *ProxmoxClient) deleteUser(username string) error {
 	return nil
 }
 
+// createPool creates a new Proxmox pool
+func (pc *ProxmoxClient) createPool(poolName string) error {
+	createURL := fmt.Sprintf("%s/api2/json/pools", pc.baseURL)
+
+	data := url.Values{}
+	data.Set("poolid", poolName)
+	data.Set("comment", "Lab resource pool")
+
+	req, err := http.NewRequest("POST", createURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Cookie", fmt.Sprintf("PVEAuthCookie=%s", pc.ticket))
+	req.Header.Set("CSRFPreventionToken", pc.csrfToken)
+
+	resp, err := pc.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("create pool request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body for error details
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("create pool failed with status: %d, response: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// deletePool deletes a Proxmox pool
+func (pc *ProxmoxClient) deletePool(poolName string) error {
+	deleteURL := fmt.Sprintf("%s/api2/json/pools/%s", pc.baseURL, poolName)
+
+	req, err := http.NewRequest("DELETE", deleteURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Cookie", fmt.Sprintf("PVEAuthCookie=%s", pc.ticket))
+	req.Header.Set("CSRFPreventionToken", pc.csrfToken)
+
+	resp, err := pc.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("delete pool request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("delete pool failed with status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // ExecuteSetup sets up Proxmox user access and adds credentials
 func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 	// Update progress: Connecting to Proxmox
@@ -243,11 +320,8 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 		return err
 	}
 
-	// Extract short ID from lab name (format: lab-{shortID})
-	shortID := ctx.LabName
-	if strings.HasPrefix(ctx.LabName, "lab-") {
-		shortID = strings.TrimPrefix(ctx.LabName, "lab-")
-	}
+	// Use lab ID directly as it's already the short ID
+	shortID := ctx.LabID
 
 	fmt.Printf("Setting up Proxmox user for lab %s...\n", ctx.LabName)
 
@@ -295,6 +369,29 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 		ctx.UpdateProgress("Creating User Account", "completed", "Proxmox user account created successfully")
 	}
 
+	// Update progress: Creating Resource Pool
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Creating Resource Pool", "running", "Creating Proxmox resource pool...")
+	}
+
+	// Generate pool name
+	poolName := fmt.Sprintf("lab-%s-pool", shortID)
+
+	// Create pool
+	fmt.Printf("- Creating pool: %s\n", poolName)
+	if err := client.createPool(poolName); err != nil {
+		if ctx.UpdateProgress != nil {
+			ctx.UpdateProgress("Creating Resource Pool", "failed", fmt.Sprintf("Failed to create pool: %v", err))
+		}
+		return fmt.Errorf("failed to create pool: %w", err)
+	}
+	fmt.Printf("  Pool created successfully\n")
+
+	// Update progress: Creating Resource Pool completed
+	if ctx.UpdateProgress != nil {
+		ctx.UpdateProgress("Creating Resource Pool", "completed", "Proxmox resource pool created successfully")
+	}
+
 	// Update progress: Setting Password
 	if ctx.UpdateProgress != nil {
 		ctx.UpdateProgress("Setting Password", "running", "Setting up user password...")
@@ -303,6 +400,7 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 	// Store lab-specific data in context for cleanup
 	ctx.Context = context.WithValue(ctx.Context, "proxmox_user_username", labUsername)
 	ctx.Context = context.WithValue(ctx.Context, "proxmox_user_password", labPassword)
+	ctx.Context = context.WithValue(ctx.Context, "proxmox_pool_name", poolName)
 
 	// Store in lab's ServiceData for persistence
 	if ctx.Lab != nil {
@@ -311,6 +409,7 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 		}
 		ctx.Lab.ServiceData["proxmox_user_username"] = labUsername
 		ctx.Lab.ServiceData["proxmox_user_password"] = labPassword
+		ctx.Lab.ServiceData["proxmox_pool_name"] = poolName
 		// Store configuration for cleanup
 		ctx.Lab.ServiceData["proxmox_uri"] = v.uri
 		ctx.Lab.ServiceData["proxmox_admin_user"] = v.adminUser
@@ -327,7 +426,7 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 		Password:  labPassword,
 		URL:       v.uri,
 		ExpiresAt: time.Now().Add(time.Duration(ctx.Duration) * time.Minute),
-		Notes:     "Proxmox VE cluster management access",
+		Notes:     fmt.Sprintf("Proxmox VE cluster management access. Resource pool: %s", poolName),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -350,11 +449,8 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 
 // ExecuteCleanup cleans up Proxmox user resources
 func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) error {
-	// Extract short ID from lab name (format: lab-{shortID})
+	// Use lab ID directly as it's already the short ID
 	shortID := ctx.LabID
-	if strings.HasPrefix(ctx.LabID, "lab-") {
-		shortID = strings.TrimPrefix(ctx.LabID, "lab-")
-	}
 
 	// Get configuration from lab's ServiceData
 	var uri, adminUser, adminPass string
@@ -404,6 +500,26 @@ func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) erro
 		}
 	}
 
+	// Get pool name from context or construct it
+	poolName, ok := ctx.Context.Value("proxmox_pool_name").(string)
+	if !ok {
+		// Try to get from lab's ServiceData
+		if ctx.Lab != nil && ctx.Lab.ServiceData != nil {
+			if storedPoolName, exists := ctx.Lab.ServiceData["proxmox_pool_name"]; exists {
+				poolName = storedPoolName
+				fmt.Printf("Retrieved pool name from lab ServiceData: %s\n", poolName)
+			} else {
+				// If pool name is not in context, construct it from lab ID
+				poolName = fmt.Sprintf("lab-%s-pool", shortID)
+				fmt.Printf("Warning: proxmox pool name not found in context or lab data, using constructed pool name: %s\n", poolName)
+			}
+		} else {
+			// If pool name is not in context, construct it from lab ID
+			poolName = fmt.Sprintf("lab-%s-pool", shortID)
+			fmt.Printf("Warning: proxmox pool name not found in context, using constructed pool name: %s\n", poolName)
+		}
+	}
+
 	// Create Proxmox client for cleanup
 	client, err := NewProxmoxClient(uri, adminUser, adminPass, skipTLSVerify)
 	if err != nil {
@@ -418,6 +534,14 @@ func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) erro
 		fmt.Printf("Warning: Failed to delete user: %v\n", err)
 	} else {
 		fmt.Printf("  User deleted successfully\n")
+	}
+
+	// Delete pool
+	fmt.Printf("- Deleting pool: %s\n", poolName)
+	if err := client.deletePool(poolName); err != nil {
+		fmt.Printf("Warning: Failed to delete pool: %v\n", err)
+	} else {
+		fmt.Printf("  Pool deleted successfully\n")
 	}
 
 	fmt.Printf("Proxmox user cleanup completed for lab %s\n", ctx.LabID)

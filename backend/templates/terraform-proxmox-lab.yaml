@@ -1,0 +1,13 @@
+name: "Terraform Proxmox Lab"
+id: "terraform-proxmox-lab"
+description: "A lab that creates a Terraform Cloud workspace with Proxmox configuration"
+expiration_duration: "6h"
+owner: "admin@spectrocloud.com"
+created_at: "2025-01-18T23:28:50Z"
+services:
+  - name: "Proxmox User"
+    service_id: "proxmox-user-1"
+    description: "Proxmox VE cluster management access for training"
+  - name: "Terraform Cloud Workspace"
+    service_id: "terraform-cloud-1"
+    description: "Terraform Cloud workspace for Proxmox infrastructure provisioning using spacewalk/bm-maas-connected-pcg"

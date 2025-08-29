@@ -59,6 +59,22 @@ definitions:
           $ref: '#/definitions/lab.ProgressStep'
         type: array
     type: object
+  models.CreateLabRequest:
+    properties:
+      duration:
+        description: Duration in minutes
+        maximum: 480
+        minimum: 15
+        type: integer
+      name:
+        description: Optional, will generate UUID if not provided
+        type: string
+      owner_id:
+        type: string
+    required:
+    - duration
+    - owner_id
+    type: object
   models.CreateUserRequest:
     properties:
       email:
@@ -129,6 +145,11 @@ definitions:
         type: string
       updated_at:
         type: string
+      used_services:
+        description: Track which services were used for this lab
+        items:
+          type: string
+        type: array
     type: object
   models.LabResponse:
     properties:
@@ -177,7 +198,7 @@ definitions:
         type: string
       services:
         items:
-          $ref: '#/definitions/models.ServiceTemplate'
+          $ref: '#/definitions/models.ServiceReference'
         type: array
     type: object
   models.LoginRequest:
@@ -194,17 +215,68 @@ definitions:
       user:
         $ref: '#/definitions/models.User'
     type: object
-  models.ServiceTemplate:
+  models.ServiceConfig:
     properties:
       config:
         additionalProperties:
           type: string
+        description: Service-specific configuration
         type: object
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      is_active:
+        description: Whether this service config is available
+        type: boolean
+      name:
+        type: string
+      type:
+        description: palette_project, palette_tenant, proxmox_user
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ServiceLimit:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        description: Whether this limit is currently active
+        type: boolean
+      max_duration:
+        description: Maximum duration in minutes
+        type: integer
+      max_labs:
+        description: Maximum number of concurrent labs using this service
+        type: integer
+      service_id:
+        description: Reference to ServiceConfig
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.ServiceReference:
+    properties:
       description:
         type: string
       name:
         type: string
-      type:
+      service_id:
+        description: Reference to ServiceConfig
+        type: string
+    type: object
+  models.ServiceUsage:
+    properties:
+      active_labs:
+        type: integer
+      limit:
+        type: integer
+      service_id:
         type: string
     type: object
   models.User:
@@ -266,33 +338,28 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Get all labs (Admin)
+      summary: Get all labs (admin)
       tags:
       - admin
   /admin/labs/{id}:
     delete:
-      description: Delete any lab in the system (admin only)
+      description: Delete a lab by ID (admin only)
       parameters:
       - description: Lab ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
-        "200":
-          description: Lab deleted successfully
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties: true
-            type: object
+        "204":
+          description: No content
         "401":
           description: Unauthorized
           schema:
@@ -308,30 +375,28 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Delete lab (Admin)
+      summary: Delete lab (admin)
       tags:
       - admin
   /admin/labs/{id}/cleanup:
     post:
-      description: Cleanup resources for a specific lab (admin only)
+      description: Clean up a lab by ID (admin only)
       parameters:
       - description: Lab ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "200":
-          description: Lab cleanup completed successfully
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
+          description: Cleanup successful
           schema:
             additionalProperties: true
             type: object
@@ -350,33 +415,30 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Cleanup lab (Admin)
+      summary: Cleanup lab (admin)
       tags:
       - admin
   /admin/labs/{id}/stop:
     post:
-      description: Stop any lab in the system (admin only)
+      description: Stop a lab by ID (admin only)
       parameters:
       - description: Lab ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "200":
-          description: Lab stopped successfully
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/models.Lab'
         "401":
           description: Unauthorized
           schema:
@@ -392,28 +454,35 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Stop lab (Admin)
+      summary: Stop lab (admin)
       tags:
       - admin
   /admin/palette-project/cleanup:
     post:
       consumes:
       - application/json
-      description: Cleanup a palette project directly (admin only)
+      description: Clean up a Palette Project by project name (admin only)
       parameters:
-      - description: Project cleanup data
+      - description: Project cleanup request
         in: body
         name: request
         required: true
         schema:
+          additionalProperties:
+            type: string
           type: object
       produces:
       - application/json
       responses:
         "200":
-          description: Palette Project cleanup completed
+          description: Cleanup successful
           schema:
             additionalProperties: true
             type: object
@@ -432,9 +501,252 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Cleanup palette project (Admin)
+      summary: Cleanup Palette Project by name (admin)
+      tags:
+      - admin
+  /admin/service-configs:
+    get:
+      description: Get all service configurations (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ServiceConfig'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Get service configurations
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: Create a new service configuration (admin only)
+      parameters:
+      - description: Service configuration
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/models.ServiceConfig'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.ServiceConfig'
+      security:
+      - BearerAuth: []
+      summary: Create service configuration
+      tags:
+      - admin
+  /admin/service-configs/{id}:
+    delete:
+      description: Delete a service configuration (admin only)
+      parameters:
+      - description: Service configuration ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete service configuration
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: Update an existing service configuration (admin only)
+      parameters:
+      - description: Service configuration ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Service configuration
+        in: body
+        name: config
+        required: true
+        schema:
+          $ref: '#/definitions/models.ServiceConfig'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ServiceConfig'
+      security:
+      - BearerAuth: []
+      summary: Update service configuration
+      tags:
+      - admin
+  /admin/service-limits:
+    get:
+      description: Get all service limits (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ServiceLimit'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Get service limits
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      description: Create a new service limit (admin only)
+      parameters:
+      - description: Service limit
+        in: body
+        name: limit
+        required: true
+        schema:
+          $ref: '#/definitions/models.ServiceLimit'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.ServiceLimit'
+      security:
+      - BearerAuth: []
+      summary: Create service limit
+      tags:
+      - admin
+  /admin/service-limits/{id}:
+    delete:
+      description: Delete a service limit (admin only)
+      parameters:
+      - description: Service limit ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete service limit
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      description: Update an existing service limit (admin only)
+      parameters:
+      - description: Service limit ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Service limit
+        in: body
+        name: limit
+        required: true
+        schema:
+          $ref: '#/definitions/models.ServiceLimit'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ServiceLimit'
+      security:
+      - BearerAuth: []
+      summary: Update service limit
+      tags:
+      - admin
+  /admin/service-usage:
+    get:
+      description: Get current usage information for all services (admin only)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.ServiceUsage'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: Get service usage
+      tags:
+      - admin
+  /admin/templates/load:
+    post:
+      consumes:
+      - application/json
+      description: Load lab templates from a directory (admin only)
+      parameters:
+      - description: Directory path
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Templates loaded
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Load lab templates (admin)
       tags:
       - admin
   /admin/users:
@@ -459,9 +771,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Get all users (Admin)
+      summary: Get all users (admin)
       tags:
       - admin
     post:
@@ -469,7 +786,7 @@ paths:
       - application/json
       description: Create a new user (admin only)
       parameters:
-      - description: User creation data
+      - description: User creation request
         in: body
         name: request
         required: true
@@ -497,33 +814,28 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Create user (Admin)
+      summary: Create user (admin)
       tags:
       - admin
   /admin/users/{id}:
     delete:
-      description: Delete a user (admin only)
+      description: Delete a user by ID (admin only)
       parameters:
       - description: User ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
-        "200":
-          description: User deleted successfully
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties: true
-            type: object
+        "204":
+          description: No content
         "401":
           description: Unauthorized
           schema:
@@ -534,9 +846,19 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Delete user (Admin)
+      summary: Delete user (admin)
       tags:
       - admin
   /admin/users/{id}/role:
@@ -550,20 +872,21 @@ paths:
         name: id
         required: true
         type: string
-      - description: Role update data
+      - description: Role update request
         in: body
         name: request
         required: true
         schema:
+          additionalProperties:
+            type: string
           type: object
       produces:
       - application/json
       responses:
         "200":
-          description: User role updated successfully
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/models.User'
         "400":
           description: Bad request
           schema:
@@ -579,9 +902,19 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
-      summary: Update user role (Admin)
+      summary: Update user role (admin)
       tags:
       - admin
   /auth/login:
@@ -652,7 +985,7 @@ paths:
       - system
   /labs:
     get:
-      description: Get all labs owned by the authenticated user
+      description: Get all labs for the authenticated user
       produces:
       - application/json
       responses:
@@ -660,7 +993,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/models.LabResponse'
+              $ref: '#/definitions/models.Lab'
             type: array
         "401":
           description: Unauthorized
@@ -677,23 +1010,24 @@ paths:
       summary: Get user labs
       tags:
       - labs
-  /labs/{id}:
-    delete:
-      description: Delete a lab owned by the authenticated user
+    post:
+      consumes:
+      - application/json
+      description: Create a new lab session
       parameters:
-      - description: Lab ID
-        in: path
-        name: id
+      - description: Lab creation request
+        in: body
+        name: request
         required: true
-        type: string
+        schema:
+          $ref: '#/definitions/models.CreateLabRequest'
       produces:
       - application/json
       responses:
-        "200":
-          description: Lab deleted successfully
+        "201":
+          description: Created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/models.Lab'
         "400":
           description: Bad request
           schema:
@@ -704,13 +1038,40 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "403":
-          description: Forbidden
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create lab
+      tags:
+      - labs
+  /labs/{id}:
+    delete:
+      description: Delete a lab by ID
+      parameters:
+      - description: Lab ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "401":
+          description: Unauthorized
           schema:
             additionalProperties: true
             type: object
         "404":
           description: Lab not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
           schema:
             additionalProperties: true
             type: object
@@ -734,13 +1095,18 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.LabResponse'
-        "400":
-          description: Bad request
+        "401":
+          description: Unauthorized
           schema:
             additionalProperties: true
             type: object
         "404":
           description: Lab not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
           schema:
             additionalProperties: true
             type: object
@@ -751,24 +1117,16 @@ paths:
       - labs
   /labs/{id}/cleanup:
     post:
-      description: Cleanup resources for a failed lab (user can cleanup their own
-        failed labs)
+      description: Clean up a lab that has failed to provision
       parameters:
       - description: Lab ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "200":
-          description: Lab cleanup completed successfully
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
+          description: Cleanup successful
           schema:
             additionalProperties: true
             type: object
@@ -777,13 +1135,13 @@ paths:
           schema:
             additionalProperties: true
             type: object
-        "403":
-          description: Forbidden
+        "404":
+          description: Lab not found
           schema:
             additionalProperties: true
             type: object
-        "404":
-          description: Lab not found
+        "500":
+          description: Internal server error
           schema:
             additionalProperties: true
             type: object
@@ -792,9 +1150,44 @@ paths:
       summary: Cleanup failed lab
       tags:
       - labs
+  /labs/{id}/cleanup/palette-project:
+    post:
+      description: Clean up a specific Palette Project service
+      parameters:
+      - description: Lab ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "200":
+          description: Cleanup successful
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Lab not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Cleanup Palette Project
+      tags:
+      - labs
   /labs/{id}/progress:
     get:
-      description: Get the progress information for a specific lab
+      description: Get the progress of a lab's provisioning
       parameters:
       - description: Lab ID
         in: path
@@ -808,13 +1201,18 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/lab.LabProgress'
-        "400":
-          description: Bad request
+        "401":
+          description: Unauthorized
           schema:
             additionalProperties: true
             type: object
         "404":
-          description: Progress not found
+          description: Lab not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
           schema:
             additionalProperties: true
             type: object
@@ -825,38 +1223,30 @@ paths:
       - labs
   /labs/{id}/stop:
     post:
-      description: Stop a lab owned by the authenticated user
+      description: Stop a lab by ID (marks it as expired)
       parameters:
       - description: Lab ID
         in: path
         name: id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
         "200":
-          description: Lab stopped successfully
+          description: OK
           schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad request
-          schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/models.Lab'
         "401":
           description: Unauthorized
           schema:
             additionalProperties: true
             type: object
-        "403":
-          description: Forbidden
+        "404":
+          description: Lab not found
           schema:
             additionalProperties: true
             type: object
-        "404":
-          description: Lab not found
+        "500":
+          description: Internal server error
           schema:
             additionalProperties: true
             type: object
@@ -877,6 +1267,16 @@ paths:
             items:
               $ref: '#/definitions/models.LabTemplate'
             type: array
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
       summary: Get lab templates
@@ -898,8 +1298,8 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.LabTemplate'
-        "400":
-          description: Bad request
+        "401":
+          description: Unauthorized
           schema:
             additionalProperties: true
             type: object
@@ -908,14 +1308,21 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
       security:
       - BearerAuth: []
       summary: Get lab template
       tags:
       - templates
-  /templates/{id}/labs:
+  /templates/{id}/create-lab:
     post:
-      description: Create a new lab instance from a template
+      consumes:
+      - application/json
+      description: Create a new lab from a specific template
       parameters:
       - description: Template ID
         in: path
@@ -936,6 +1343,16 @@ paths:
             type: object
         "401":
           description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Template not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
           schema:
             additionalProperties: true
             type: object

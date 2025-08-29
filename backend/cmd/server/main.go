@@ -74,6 +74,10 @@ func main() {
 		log.Printf("Successfully loaded service limits")
 	}
 
+	// Enrich templates with service type information
+	log.Printf("Enriching templates with service type information")
+	labService.EnrichTemplatesWithServiceTypes()
+
 	handler := handlers.NewHandler(authService, labService)
 
 	// Create a default admin user for testing

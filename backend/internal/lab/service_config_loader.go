@@ -100,7 +100,7 @@ func (scl *ServiceConfigLoader) validateServiceConfig(config *models.ServiceConf
 
 	// Validate service type
 	switch config.Type {
-	case "palette_project", "proxmox_user", "palette_tenant":
+	case "palette_project", "proxmox_user", "palette_tenant", "terraform_cloud":
 		// Valid service types
 	default:
 		return fmt.Errorf("unsupported service type: %s", config.Type)

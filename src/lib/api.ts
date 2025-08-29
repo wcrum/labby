@@ -65,9 +65,10 @@ export interface CreateLabRequest {
 
 export interface ServiceTemplate {
   name: string;
-  type: string;
+  type?: string; // Optional since it's enriched from ServiceConfig
   description: string;
-  config: Record<string, string>;
+  service_id?: string; // Optional for backward compatibility
+  config?: Record<string, string>; // Optional for backward compatibility
 }
 
 export interface LabTemplate {

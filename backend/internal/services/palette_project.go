@@ -68,11 +68,8 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 		return err
 	}
 
-	// Extract short ID from lab name (format: lab-{shortID})
-	shortID := ctx.LabName
-	if strings.HasPrefix(ctx.LabName, "lab-") {
-		shortID = strings.TrimPrefix(ctx.LabName, "lab-")
-	}
+	// Use lab ID directly as it's already the short ID
+	shortID := ctx.LabID
 
 	fmt.Printf("Setting up Palette Project for lab %s...\n", ctx.LabName)
 
@@ -371,11 +368,8 @@ func (v *PaletteProjectService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 		return fmt.Errorf("PALETTE_HOST and PALETTE_API_KEY environment variables are required")
 	}
 
-	// Extract short ID from lab name (format: lab-{shortID})
+	// Use lab ID directly as it's already the short ID
 	shortID := ctx.LabID
-	if strings.HasPrefix(ctx.LabID, "lab-") {
-		shortID = strings.TrimPrefix(ctx.LabID, "lab-")
-	}
 
 	// Get lab-specific data from context
 	sandboxID, ok := ctx.Context.Value("palette_project_sandbox_id").(string)

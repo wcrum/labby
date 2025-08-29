@@ -155,7 +155,7 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 	}
 
 	labID := models.GenerateID()
-	labName := models.GenerateLabName()
+	labName := fmt.Sprintf("lab-%s", labID)
 
 	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Generated lab ID: %s, name: %s\n", labID, labName)
 

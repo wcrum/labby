@@ -97,11 +97,8 @@ func (v *PaletteTenantService) ExecuteSetup(ctx *interfaces.SetupContext) error 
 		return fmt.Errorf("%s", errMsg)
 	}
 
-	// Extract short ID from lab name (format: lab-{shortID})
-	shortID := ctx.LabName
-	if strings.HasPrefix(ctx.LabName, "lab-") {
-		shortID = strings.TrimPrefix(ctx.LabName, "lab-")
-	}
+	// Use lab ID directly as it's already the short ID
+	shortID := ctx.LabID
 
 	fmt.Printf("Setting up Palette Tenant for lab %s...\n", ctx.LabName)
 
@@ -353,11 +350,8 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 	fmt.Printf("PaletteTenantService.ExecuteCleanup called for lab: %s\n", ctx.LabID)
 	fmt.Printf("PaletteTenantService: Starting cleanup process...\n")
 
-	// Extract short ID from lab name (format: lab-{shortID})
+	// Use lab ID directly as it's already the short ID
 	shortID := ctx.LabID
-	if strings.HasPrefix(ctx.LabID, "lab-") {
-		shortID = strings.TrimPrefix(ctx.LabID, "lab-")
-	}
 	fmt.Printf("Extracted short ID: %s\n", shortID)
 
 	// Get configuration from lab's ServiceData

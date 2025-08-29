@@ -81,6 +81,8 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 			s.provisionProxmoxUserService(labID, serviceConfig)
 		case "palette_tenant":
 			s.provisionPaletteTenantService(labID, serviceConfig)
+		case "terraform_cloud":
+			s.provisionTerraformCloudService(labID, serviceConfig)
 		default:
 			s.progressTracker.AddLog(labID, fmt.Sprintf("Unknown service type: %s", serviceConfig.Type))
 		}

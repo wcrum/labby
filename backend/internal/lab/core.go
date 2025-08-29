@@ -55,9 +55,10 @@ func (s *Service) CreateLab(name, ownerID string, durationMinutes int) (*models.
 	defer s.mu.Unlock()
 
 	now := time.Now()
+	labID := models.GenerateID()
 	lab := &models.Lab{
-		ID:           models.GenerateID(),
-		Name:         models.GenerateLabName(), // Use short lab name format
+		ID:           labID,
+		Name:         fmt.Sprintf("lab-%s", labID), // Use consistent lab name format
 		Status:       models.LabStatusProvisioning,
 		OwnerID:      ownerID,
 		StartedAt:    now,
@@ -87,7 +88,27 @@ func (s *Service) GetProgress(labID string) *LabProgress {
 
 // LoadTemplates loads lab templates from a directory
 func (s *Service) LoadTemplates(dirPath string) error {
-	return s.templateLoader.LoadTemplatesFromDirectory(dirPath)
+	fmt.Printf("Service.LoadTemplates: Loading from %s\n", dirPath)
+	templateLoader := NewTemplateLoader(s.templateManager)
+	err := templateLoader.LoadTemplatesFromDirectory(dirPath)
+	if err != nil {
+		fmt.Printf("Service.LoadTemplates: Failed to load: %v\n", err)
+		return err
+	}
+
+	// Enrich templates with service type information
+	s.templateManager.EnrichTemplatesWithServiceTypes(s.serviceConfigManager)
+
+	// Log what was loaded
+	templates := s.templateManager.GetAllTemplates()
+	fmt.Printf("Service.LoadTemplates: Loaded %d templates:\n", len(templates))
+	for _, template := range templates {
+		fmt.Printf("  - %s (ID: %s, Services: %d)\n", template.Name, template.ID, len(template.Services))
+		for _, service := range template.Services {
+			fmt.Printf("    * %s (ID: %s, Type: %s)\n", service.Name, service.ServiceID, service.Type)
+		}
+	}
+	return nil
 }
 
 // LoadServiceConfigs loads service configurations from a directory
@@ -136,6 +157,11 @@ func (s *Service) GetTemplates() []*models.LabTemplate {
 // GetTemplate returns a specific lab template
 func (s *Service) GetTemplate(templateID string) (*models.LabTemplate, bool) {
 	return s.templateManager.GetTemplate(templateID)
+}
+
+// EnrichTemplatesWithServiceTypes enriches all templates with service type information
+func (s *Service) EnrichTemplatesWithServiceTypes() {
+	s.templateManager.EnrichTemplatesWithServiceTypes(s.serviceConfigManager)
 }
 
 // CreateLabFromTemplate creates a lab from a template

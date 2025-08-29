@@ -21,3 +21,11 @@
   is_active: true
   created_at: "2025-01-18T23:28:50Z"
   updated_at: "2025-01-18T23:28:50Z"
+
+- id: "limit-terraform-cloud-1"
+  service_id: "terraform-cloud-1"
+  max_labs: 5
+  max_duration: 480
+  is_active: true
+  created_at: "2025-01-18T23:28:50Z"
+  updated_at: "2025-01-18T23:28:50Z"
