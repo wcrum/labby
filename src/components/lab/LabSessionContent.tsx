@@ -3,6 +3,16 @@
 import React, { useEffect, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { motion } from "framer-motion";
 import { apiService } from "@/lib/api";
 import { LabStartingView } from "./LabStartingView";
@@ -23,6 +33,7 @@ export function LabSessionContent({ labId }: { labId: string }) {
   const [lab, setLab] = useState<LabSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [stopping, setStopping] = useState(false);
+  const [showStopDialog, setShowStopDialog] = useState(false);
 
   const totalMs = lab?.startedAt && lab?.endsAt ? Math.max(0, new Date(lab.endsAt).getTime() - new Date(lab.startedAt).getTime()) : undefined;
   const overallCountdown = useCountdown(lab?.endsAt, totalMs);
@@ -58,6 +69,7 @@ export function LabSessionContent({ labId }: { labId: string }) {
       await apiService.stopLab(lab.id);
       // Refresh lab data to show updated status
       await fetchLabSession(labId).then(setLab);
+      setShowStopDialog(false);
     } catch (error) {
       console.error("Failed to stop lab:", error);
     } finally {
@@ -89,7 +101,7 @@ export function LabSessionContent({ labId }: { labId: string }) {
       <LabHeader 
         lab={lab} 
         countdown={overallCountdown} 
-        onStopLab={handleStopLab}
+        onStopLab={() => setShowStopDialog(true)}
         stopping={stopping}
       />
 
@@ -102,6 +114,27 @@ export function LabSessionContent({ labId }: { labId: string }) {
       <Separator />
 
       <LabInfoCards lab={lab} />
+
+      {/* Stop Lab Confirmation Dialog */}
+      <AlertDialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop Lab</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to stop this lab? This will delete all resources and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleStopLab}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Stop Lab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

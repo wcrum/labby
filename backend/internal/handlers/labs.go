@@ -245,9 +245,11 @@ func (h *Handler) CleanupPaletteProject(c *gin.Context) {
 	}
 
 	// Execute palette project cleanup directly
-	serviceManager := services.NewServiceManager()
-	paletteService, exists := serviceManager.GetRegistry().GetService("palette")
+	serviceConfigManager := h.labService.GetServiceConfigManager()
+	serviceManager := services.NewServiceManager(serviceConfigManager)
 
+	// Get the service by type (palette_project)
+	paletteService, exists := serviceManager.GetServiceByType("palette_project")
 	if !exists {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Palette Project service not available"})
 		return

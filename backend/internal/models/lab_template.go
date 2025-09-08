@@ -21,6 +21,7 @@ type ServiceReference struct {
 	ServiceID   string `yaml:"service_id" json:"service_id"` // Reference to ServiceConfig
 	Description string `yaml:"description" json:"description"`
 	Type        string `yaml:"type" json:"type,omitempty"` // Service type (enriched from ServiceConfig)
+	Logo        string `yaml:"logo" json:"logo,omitempty"` // Service logo (enriched from ServiceConfig)
 }
 
 // ServiceTemplate represents a service configuration in a lab template (legacy, kept for backward compatibility)
@@ -70,6 +71,7 @@ func (ltm *LabTemplateManager) EnrichTemplatesWithServiceTypes(serviceConfigMana
 			serviceRef := &template.Services[i]
 			if serviceConfig, exists := serviceConfigManager.GetServiceConfig(serviceRef.ServiceID); exists {
 				serviceRef.Type = serviceConfig.Type
+				serviceRef.Logo = serviceConfig.Logo
 			}
 		}
 	}

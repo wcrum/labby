@@ -94,13 +94,14 @@ type LoginResponse struct {
 
 // LabResponse represents a lab response with owner information
 type LabResponse struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Status      LabStatus    `json:"status"`
-	Owner       User         `json:"owner"`
-	StartedAt   time.Time    `json:"started_at"`
-	EndsAt      time.Time    `json:"ends_at"`
-	Credentials []Credential `json:"credentials"`
+	ID           string             `json:"id"`
+	Name         string             `json:"name"`
+	Status       LabStatus          `json:"status"`
+	Owner        User               `json:"owner"`
+	StartedAt    time.Time          `json:"started_at"`
+	EndsAt       time.Time          `json:"ends_at"`
+	Credentials  []Credential       `json:"credentials"`
+	UsedServices []ServiceReference `json:"used_services,omitempty"` // Track which services were used for this lab
 }
 
 // GenerateID generates a new short ID (8 characters)
@@ -146,6 +147,7 @@ type ServiceConfig struct {
 	Name        string            `json:"name" yaml:"name"`
 	Type        string            `json:"type" yaml:"type"` // palette_project, palette_tenant, proxmox_user
 	Description string            `json:"description" yaml:"description"`
+	Logo        string            `json:"logo" yaml:"logo"`           // Path to logo file (SVG/PNG)
 	Config      map[string]string `json:"config" yaml:"config"`       // Service-specific configuration
 	IsActive    bool              `json:"is_active" yaml:"is_active"` // Whether this service config is available
 	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`

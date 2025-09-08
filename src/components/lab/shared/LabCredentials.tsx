@@ -3,9 +3,9 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordToggleFieldWithCopy } from "@/components/ui/password-toggle-field";
+import { InputWithCopy } from "@/components/ui/input-with-copy";
 import { ShieldCheck, ExternalLink, Info } from "lucide-react";
 import { Credential } from "@/types/lab";
 
@@ -39,22 +39,28 @@ export function LabCredentials({ credentials }: LabCredentialsProps) {
             )}
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-3">
-              <div className="grid grid-cols-3 items-center gap-2">
-                <Label className="col-span-1">Username</Label>
-                <Input className="col-span-2 font-mono" value={cred.username} readOnly />
-              </div>
-              <div className="grid grid-cols-3 items-center gap-2">
-                <Label className="col-span-1">Password</Label>
-                <div className="col-span-2">
-                  <PasswordToggleFieldWithCopy 
-                    value={cred.password} 
-                    placeholder="Password"
-                    className="w-full"
-                  />
+              <div className="grid grid-cols-1 gap-3">
+                <div className="grid grid-cols-3 items-center gap-2">
+                  <Label className="col-span-1">Username</Label>
+                  <div className="col-span-2">
+                    <InputWithCopy 
+                      value={cred.username} 
+                      placeholder="Username"
+                      className="w-full font-mono"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 items-center gap-2">
+                  <Label className="col-span-1">Password</Label>
+                  <div className="col-span-2">
+                    <PasswordToggleFieldWithCopy 
+                      value={cred.password} 
+                      placeholder="Password"
+                      className="w-full"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
             <div className="text-xs text-muted-foreground flex items-center gap-2">
               <Info className="h-4 w-4" /> Expires at {new Date(cred.expiresAt).toLocaleString()}
             </div>

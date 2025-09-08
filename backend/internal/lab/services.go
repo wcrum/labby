@@ -13,16 +13,11 @@ import (
 
 // provisionPaletteService provisions a Palette service using the real Palette Project service
 func (s *Service) provisionPaletteService(labID string, serviceConfig *models.ServiceConfig) {
-	// Set environment variables from service config
-	if host, ok := serviceConfig.Config["host"]; ok {
-		os.Setenv("PALETTE_HOST", host)
-	}
-	if apiKey, ok := serviceConfig.Config["api_key"]; ok {
-		os.Setenv("PALETTE_API_KEY", apiKey)
-	}
-
 	// Create Palette Project service instance
 	paletteService := services.NewPaletteProjectService()
+
+	// Configure the service with credentials from service config
+	paletteService.ConfigureFromServiceConfig(serviceConfig)
 
 	// Get lab for context
 	s.mu.Lock()
@@ -337,4 +332,75 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 	}
 
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup completed for lab %s", lab.Name))
+}
+
+// provisionGuacamoleService provisions a Guacamole service using the real Guacamole service
+func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.ServiceConfig) {
+	// Create Guacamole service instance
+	guacamoleService := services.NewGuacamoleService()
+
+	// Configure the service from the service configuration
+	guacamoleService.ConfigureFromServiceConfig(serviceConfig.Config)
+
+	// Get lab for context
+	s.mu.Lock()
+	lab, exists := s.labs[labID]
+	s.mu.Unlock()
+
+	if !exists {
+		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
+		return
+	}
+
+	// Create setup context
+	setupCtx := &interfaces.SetupContext{
+		LabID:    labID,
+		LabName:  lab.Name,
+		Duration: int(time.Until(lab.EndsAt).Minutes()),
+		OwnerID:  lab.OwnerID,
+		Context:  context.Background(),
+		Lab:      lab,
+		AddCredential: func(credential *interfaces.Credential) error {
+			// Convert to models.Credential and add to lab
+			cred := models.Credential{
+				ID:        credential.ID,
+				LabID:     credential.LabID,
+				Label:     credential.Label,
+				Username:  credential.Username,
+				Password:  credential.Password,
+				URL:       credential.URL,
+				ExpiresAt: credential.ExpiresAt,
+				Notes:     credential.Notes,
+				CreatedAt: credential.CreatedAt,
+				UpdatedAt: credential.UpdatedAt,
+			}
+
+			s.mu.Lock()
+			lab.Credentials = append(lab.Credentials, cred)
+			s.mu.Unlock()
+
+			return nil
+		},
+		UpdateProgress: func(stepName, status, message string) {
+			s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, stepName, status, message)
+		},
+	}
+
+	// Execute the real setup - services will update their own progress
+	err := guacamoleService.ExecuteSetup(setupCtx)
+	if err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Guacamole setup failed: %v", err))
+		s.progressTracker.FailProgress(labID, fmt.Sprintf("Guacamole setup failed: %v", err))
+
+		// Set lab status to error
+		s.mu.Lock()
+		if lab, exists := s.labs[labID]; exists {
+			lab.Status = models.LabStatusError
+			lab.UpdatedAt = time.Now()
+		}
+		s.mu.Unlock()
+		return
+	}
+
+	s.progressTracker.AddLog(labID, "Guacamole user created successfully")
 }

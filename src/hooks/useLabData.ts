@@ -1,7 +1,7 @@
 // Shared hook for fetching and managing lab data
 
 import { useEffect, useState } from "react";
-import { apiService, LabResponse } from "@/lib/api";
+import { apiService } from "@/lib/api";
 import { LabSession } from "@/types/lab";
 import { convertLabResponse } from "@/lib/lab-utils";
 

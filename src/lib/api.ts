@@ -57,6 +57,7 @@ export interface LabResponse {
   started_at: string;
   ends_at: string;
   credentials: Credential[];
+  used_services?: ServiceTemplate[];
 }
 
 export interface LoginRequest {
@@ -79,7 +80,8 @@ export interface ServiceTemplate {
   name: string;
   type?: string; // Optional since it's enriched from ServiceConfig
   description: string;
-  service_id?: string; // Optional for backward compatibility
+  service_id: string; // Required for enriched services
+  logo?: string; // Optional since it's enriched from ServiceConfig
   config?: Record<string, string>; // Optional for backward compatibility
 }
 
@@ -322,6 +324,92 @@ class ApiService {
     await this.request(`/api/admin/terraform-cloud/cleanup`, {
       method: 'POST',
       body: JSON.stringify({ lab_id: labId }),
+    });
+  }
+
+  async cleanupGuacamole(labId: string): Promise<void> {
+    await this.request(`/api/admin/guacamole/cleanup`, {
+      method: 'POST',
+      body: JSON.stringify({ lab_id: labId }),
+    });
+  }
+
+  // New flexible cleanup API methods
+  async getAvailableServices(): Promise<{
+    available_services: Array<{
+      type: string;
+      configs: Array<{
+        id: string;
+        name: string;
+        description: string;
+        is_active: boolean;
+      }>;
+      parameters: Array<{
+        name: string;
+        description: string;
+        required: boolean;
+        example?: string;
+      }>;
+    }>;
+    usage: {
+      endpoint: string;
+      method: string;
+      required_fields: string[];
+      optional_fields: string[];
+      example: Record<string, unknown>;
+    };
+  }> {
+    return this.request('/api/admin/cleanup/services', {
+      method: 'GET',
+    });
+  }
+
+  async cleanupService(request: {
+    service_type: string;
+    service_config_id?: string;
+    lab_id?: string;
+    parameters?: Record<string, string>;
+  }): Promise<{
+    message: string;
+    service_type: string;
+    lab_id?: string;
+    parameters?: Record<string, string>;
+  }> {
+    return this.request('/api/admin/cleanup/service', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // Simplified cleanup by lab UUID only - auto-constructs all resource names
+  async cleanupByLab(labId: string): Promise<{
+    message: string;
+    lab_id: string;
+    results: Record<string, string>;
+    errors: Record<string, string>;
+    successful: number;
+    failed: number;
+  }> {
+    return this.request('/api/admin/cleanup/lab', {
+      method: 'POST',
+      body: JSON.stringify({ lab_id: labId }),
+    });
+  }
+
+  // Service-specific cleanup by service config ID and lab UUID only
+  async cleanupServiceByID(serviceConfigId: string, labId: string): Promise<{
+    message: string;
+    service_config_id: string;
+    service_type: string;
+    lab_id: string;
+    auto_constructed_resources: Record<string, string>;
+  }> {
+    return this.request('/api/admin/cleanup/service-by-id', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        service_config_id: serviceConfigId,
+        lab_id: labId 
+      }),
     });
   }
 

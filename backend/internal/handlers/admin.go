@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
@@ -13,6 +12,48 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// AdminCleanupRequest represents a request to cleanup any service
+type AdminCleanupRequest struct {
+	ServiceType     string            `json:"service_type" binding:"required"` // Required: service type (e.g., "palette_project")
+	ServiceConfigID string            `json:"service_config_id,omitempty"`     // Optional: specific service config ID
+	LabID           string            `json:"lab_id,omitempty"`                // Optional: lab ID for context
+	Parameters      map[string]string `json:"parameters,omitempty"`            // Optional: custom parameters for cleanup
+}
+
+// AdminCleanupServiceByIDRequest represents a request to cleanup a specific service config by ID and lab UUID
+type AdminCleanupServiceByIDRequest struct {
+	ServiceConfigID string `json:"service_config_id" binding:"required"` // Required: service config ID (e.g., "palette-project")
+	LabID           string `json:"lab_id" binding:"required"`            // Required: lab UUID
+}
+
+// AdminCleanupByLabRequest represents a simplified request to cleanup by lab UUID only
+type AdminCleanupByLabRequest struct {
+	LabID string `json:"lab_id" binding:"required"` // Required: lab UUID
+}
+
+// ServiceInfo represents information about a service configuration
+type ServiceInfo struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsActive    bool   `json:"is_active"`
+}
+
+// ServiceTypeInfo represents information about a service type and its configurations
+type ServiceTypeInfo struct {
+	Type       string          `json:"type"`
+	Configs    []ServiceInfo   `json:"configs"`
+	Parameters []ParameterInfo `json:"parameters"`
+}
+
+// ParameterInfo represents information about a cleanup parameter
+type ParameterInfo struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+	Example     string `json:"example,omitempty"`
+}
 
 // GetAllLabs handles getting all labs (admin only)
 // @Summary Get all labs (admin)
@@ -243,136 +284,459 @@ func (h *Handler) DeleteUser(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// AdminCleanupPaletteProject handles cleaning up a Palette Project by name (admin only)
-// @Summary Cleanup Palette Project by name (admin)
-// @Description Clean up a Palette Project by project name (admin only)
+// AdminCleanupService handles flexible cleanup for any service (admin only)
+// @Summary Cleanup any service with custom parameters (admin)
+// @Description Clean up resources for any service type with custom input parameters (admin only)
 // @Tags admin
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param request body map[string]string true "Project cleanup request"
+// @Param request body AdminCleanupRequest true "Service cleanup request"
 // @Success 200 {object} map[string]interface{} "Cleanup successful"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /admin/palette-project/cleanup [post]
-func (h *Handler) AdminCleanupPaletteProject(c *gin.Context) {
-	var req map[string]string
+// @Router /admin/cleanup/service [post]
+func (h *Handler) AdminCleanupService(c *gin.Context) {
+	var req AdminCleanupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	projectName, exists := req["project_name"]
-	if !exists || projectName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name is required"})
+	// Validate required fields
+	if req.ServiceType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service_type is required"})
 		return
 	}
 
-	// Execute palette project cleanup directly
-	serviceManager := services.NewServiceManager()
-	paletteService, exists := serviceManager.GetRegistry().GetService("palette")
+	// Get service manager
+	serviceConfigManager := h.labService.GetServiceConfigManager()
+	serviceManager := services.NewServiceManager(serviceConfigManager)
 
+	// Get the service by type
+	service, exists := serviceManager.GetServiceByType(req.ServiceType)
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Palette Project service not available"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service type '%s' not found. Available types: palette_project, palette_tenant, proxmox_user, terraform_cloud, guacamole", req.ServiceType)})
 		return
 	}
 
-	// Determine the actual project name and short ID
-	var shortID, actualProjectName string
-	if strings.HasPrefix(projectName, "lab-") {
-		// If project name already has "lab-" prefix, extract the short ID
-		shortID = strings.TrimPrefix(projectName, "lab-")
-		actualProjectName = projectName
-	} else {
-		// If project name is just the short ID, construct the full project name
-		shortID = projectName
-		actualProjectName = fmt.Sprintf("lab-%s", projectName)
+	// Configure service with service config if provided
+	if req.ServiceConfigID != "" {
+		serviceConfig, exists := serviceConfigManager.GetServiceConfig(req.ServiceConfigID)
+		if !exists {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service config '%s' not found", req.ServiceConfigID)})
+			return
+		}
+
+		// Configure the service with the service config
+		if configurableService, ok := service.(interface {
+			ConfigureFromServiceConfig(*models.ServiceConfig)
+		}); ok {
+			configurableService.ConfigureFromServiceConfig(serviceConfig)
+		}
 	}
 
-	// Create cleanup context with the short ID as LabID
+	// Create cleanup context
 	cleanupCtx := &interfaces.CleanupContext{
-		LabID:   shortID, // Use short ID as LabID for this cleanup
+		LabID:   req.LabID,
 		Context: c.Request.Context(),
 		Lab:     nil, // No lab instance for admin cleanup
 	}
 
-	// Add project name to context for the service to use
-	cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", actualProjectName)
+	// Add custom parameters to context
+	for key, value := range req.Parameters {
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, key, value)
+	}
 
 	// Execute cleanup
-	err := paletteService.ExecuteCleanup(cleanupCtx)
+	err := service.ExecuteCleanup(cleanupCtx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup Palette Project: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup %s service: %v", req.ServiceType, err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Palette Project cleanup completed successfully"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":      fmt.Sprintf("%s cleanup completed successfully", req.ServiceType),
+		"service_type": req.ServiceType,
+		"lab_id":       req.LabID,
+		"parameters":   req.Parameters,
+	})
 }
 
-// AdminCleanupTerraformCloud handles cleaning up Terraform Cloud resources by lab ID (admin only)
-// @Summary Cleanup Terraform Cloud resources by lab ID (admin)
-// @Description Clean up all Terraform Cloud resources (workspaces, runs, etc.) associated with a lab ID (admin only)
+// AdminGetAvailableServices returns all available service types and their cleanup parameters
+// @Summary Get available services for cleanup (admin)
+// @Description Get all available service types and their cleanup parameters (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} map[string]interface{} "Available services"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Router /admin/cleanup/services [get]
+func (h *Handler) AdminGetAvailableServices(c *gin.Context) {
+	serviceConfigManager := h.labService.GetServiceConfigManager()
+
+	// Get all service configs
+	serviceConfigs := serviceConfigManager.GetAllServiceConfigs()
+
+	// Group by service type
+	servicesByType := make(map[string][]ServiceInfo)
+	for _, config := range serviceConfigs {
+		serviceType := config.Type
+		if servicesByType[serviceType] == nil {
+			servicesByType[serviceType] = []ServiceInfo{}
+		}
+		servicesByType[serviceType] = append(servicesByType[serviceType], ServiceInfo{
+			ID:          config.ID,
+			Name:        config.Name,
+			Description: config.Description,
+			IsActive:    config.IsActive,
+		})
+	}
+
+	// Get cleanup parameters for each service type
+	serviceTypes := []ServiceTypeInfo{}
+	for serviceType, configs := range servicesByType {
+		serviceInfo := ServiceTypeInfo{
+			Type:       serviceType,
+			Configs:    configs,
+			Parameters: getCleanupParametersForServiceType(serviceType),
+		}
+		serviceTypes = append(serviceTypes, serviceInfo)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"available_services": serviceTypes,
+		"usage": gin.H{
+			"endpoint":        "/admin/cleanup/service",
+			"method":          "POST",
+			"required_fields": []string{"service_type"},
+			"optional_fields": []string{"service_config_id", "lab_id", "parameters"},
+			"example": gin.H{
+				"service_type":      "palette_project",
+				"service_config_id": "palette-project",
+				"lab_id":            "abc123",
+				"parameters": gin.H{
+					"project_name": "lab-abc123",
+					"user_email":   "lab+abc123@spectrocloud.com",
+				},
+			},
+		},
+	})
+}
+
+// AdminCleanupServiceByID handles cleanup for a specific service config by ID and lab UUID (admin only)
+// @Summary Cleanup a specific service config for a lab by UUID (admin)
+// @Description Clean up resources for a specific service config using the service config ID and lab UUID - automatically constructs all resource names (admin only)
 // @Tags admin
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param request body map[string]string true "Terraform Cloud cleanup request"
+// @Param request body AdminCleanupServiceByIDRequest true "Service cleanup request"
 // @Success 200 {object} map[string]interface{} "Cleanup successful"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /admin/terraform-cloud/cleanup [post]
-func (h *Handler) AdminCleanupTerraformCloud(c *gin.Context) {
-	var req map[string]string
+// @Router /admin/cleanup/service-by-id [post]
+func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
+	var req AdminCleanupServiceByIDRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	labID, exists := req["lab_id"]
-	if !exists || labID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+	// Validate required fields
+	if req.ServiceConfigID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service_config_id is required"})
+		return
+	}
+	if req.LabID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lab_id is required"})
 		return
 	}
 
-	// Execute Terraform Cloud cleanup directly
-	serviceManager := services.NewServiceManager()
-	terraformCloudService, exists := serviceManager.GetRegistry().GetService("terraform_cloud")
-
-	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Terraform Cloud service not available"})
-		return
-	}
-
-	// Get the service configuration to properly configure the service
+	// Get service manager
 	serviceConfigManager := h.labService.GetServiceConfigManager()
-	terraformConfig, exists := serviceConfigManager.GetServiceConfig("terraform-cloud-1")
-	if !exists || terraformConfig == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Terraform Cloud service configuration not found"})
+	serviceManager := services.NewServiceManager(serviceConfigManager)
+
+	// Get the specific service config
+	serviceConfig, exists := serviceConfigManager.GetServiceConfig(req.ServiceConfigID)
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service config '%s' not found", req.ServiceConfigID)})
 		return
 	}
 
-	// Configure the service with the service configuration
-	terraformCloudService.(*services.TerraformCloudService).ConfigureFromServiceConfig(terraformConfig.Config, labID)
+	// Get the service by type from the service config
+	service, exists := serviceManager.GetServiceByType(serviceConfig.Type)
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service type '%s' not found for config '%s'", serviceConfig.Type, req.ServiceConfigID)})
+		return
+	}
 
-	// Create cleanup context with the lab ID
+	// Configure service with the specific service config
+	if configurableService, ok := service.(interface {
+		ConfigureFromServiceConfig(*models.ServiceConfig)
+	}); ok {
+		configurableService.ConfigureFromServiceConfig(serviceConfig)
+	}
+
+	// Create cleanup context with auto-constructed parameters
 	cleanupCtx := &interfaces.CleanupContext{
-		LabID:   labID,
+		LabID:   req.LabID,
 		Context: c.Request.Context(),
 		Lab:     nil, // No lab instance for admin cleanup
 	}
 
+	// Auto-construct parameters based on service type
+	switch serviceConfig.Type {
+	case "palette_project":
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", req.LabID))
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", req.LabID))
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", req.LabID))
+	case "palette_tenant":
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", req.LabID))
+	case "proxmox_user":
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", req.LabID))
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", req.LabID))
+	case "terraform_cloud":
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", req.LabID))
+	case "guacamole":
+		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", req.LabID))
+	}
+
 	// Execute cleanup
-	err := terraformCloudService.ExecuteCleanup(cleanupCtx)
+	err := service.ExecuteCleanup(cleanupCtx)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup Terraform Cloud resources: %v", err)})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup service config '%s': %v", req.ServiceConfigID, err)})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Terraform Cloud cleanup completed successfully"})
+	c.JSON(http.StatusOK, gin.H{
+		"message":                    fmt.Sprintf("Service config '%s' cleanup completed successfully", req.ServiceConfigID),
+		"service_config_id":          req.ServiceConfigID,
+		"service_type":               serviceConfig.Type,
+		"lab_id":                     req.LabID,
+		"auto_constructed_resources": getAutoConstructedResources(serviceConfig.Type, req.LabID),
+	})
+}
+
+// getAutoConstructedResources returns the list of auto-constructed resource names for a service type
+func getAutoConstructedResources(serviceType, labID string) map[string]string {
+	resources := make(map[string]string)
+
+	switch serviceType {
+	case "palette_project":
+		resources["project_name"] = fmt.Sprintf("lab-%s", labID)
+		resources["user_email"] = fmt.Sprintf("lab+%s@spectrocloud.com", labID)
+		resources["api_key_name"] = fmt.Sprintf("lab-%s-api-key", labID)
+	case "palette_tenant":
+		resources["tenant_id"] = fmt.Sprintf("tenant-%s", labID)
+	case "proxmox_user":
+		resources["username"] = fmt.Sprintf("lab-%s@pve", labID)
+		resources["pool_name"] = fmt.Sprintf("lab-%s-pool", labID)
+	case "terraform_cloud":
+		resources["workspace_name"] = fmt.Sprintf("lab-%s-workspace", labID)
+	case "guacamole":
+		resources["username"] = fmt.Sprintf("lab-%s", labID)
+	}
+
+	return resources
+}
+
+// AdminCleanupByLab handles simplified cleanup by lab UUID only (admin only)
+// @Summary Cleanup all services for a lab by UUID (admin)
+// @Description Clean up all resources for a lab using just the lab UUID - automatically constructs all resource names (admin only)
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body AdminCleanupByLabRequest true "Lab cleanup request"
+// @Success 200 {object} map[string]interface{} "Cleanup successful"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/cleanup/lab [post]
+func (h *Handler) AdminCleanupByLab(c *gin.Context) {
+	var req AdminCleanupByLabRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate required fields
+	if req.LabID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lab_id is required"})
+		return
+	}
+
+	// Get service manager
+	serviceConfigManager := h.labService.GetServiceConfigManager()
+	serviceManager := services.NewServiceManager(serviceConfigManager)
+
+	// Get all available service types
+	serviceConfigs := serviceConfigManager.GetAllServiceConfigs()
+	serviceTypes := make(map[string]bool)
+	for _, config := range serviceConfigs {
+		serviceTypes[config.Type] = true
+	}
+
+	// Track cleanup results
+	results := make(map[string]interface{})
+	errors := make(map[string]string)
+
+	// Cleanup each service type
+	for serviceType := range serviceTypes {
+		service, exists := serviceManager.GetServiceByType(serviceType)
+		if !exists {
+			errors[serviceType] = "Service not available"
+			continue
+		}
+
+		// Configure service with service config if available
+		for _, config := range serviceConfigs {
+			if config.Type == serviceType && config.IsActive {
+				if configurableService, ok := service.(interface {
+					ConfigureFromServiceConfig(*models.ServiceConfig)
+				}); ok {
+					configurableService.ConfigureFromServiceConfig(config)
+				}
+				break
+			}
+		}
+
+		// Create cleanup context with auto-constructed parameters
+		cleanupCtx := &interfaces.CleanupContext{
+			LabID:   req.LabID,
+			Context: c.Request.Context(),
+			Lab:     nil, // No lab instance for admin cleanup
+		}
+
+		// Auto-construct common parameters based on service type
+		switch serviceType {
+		case "palette_project":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", req.LabID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", req.LabID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", req.LabID))
+		case "palette_tenant":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", req.LabID))
+		case "proxmox_user":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", req.LabID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", req.LabID))
+		case "terraform_cloud":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", req.LabID))
+		case "guacamole":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", req.LabID))
+		}
+
+		// Execute cleanup
+		err := service.ExecuteCleanup(cleanupCtx)
+		if err != nil {
+			errors[serviceType] = err.Error()
+		} else {
+			results[serviceType] = "Cleanup completed successfully"
+		}
+	}
+
+	// Prepare response
+	response := gin.H{
+		"message":    "Lab cleanup completed",
+		"lab_id":     req.LabID,
+		"results":    results,
+		"errors":     errors,
+		"successful": len(results),
+		"failed":     len(errors),
+	}
+
+	// Determine HTTP status
+	if len(errors) > 0 && len(results) == 0 {
+		c.JSON(http.StatusInternalServerError, response)
+	} else if len(errors) > 0 {
+		c.JSON(http.StatusPartialContent, response)
+	} else {
+		c.JSON(http.StatusOK, response)
+	}
+}
+
+// getCleanupParametersForServiceType returns the cleanup parameters for a specific service type
+func getCleanupParametersForServiceType(serviceType string) []ParameterInfo {
+	switch serviceType {
+	case "palette_project":
+		return []ParameterInfo{
+			{
+				Name:        "project_name",
+				Description: "Name of the Palette project to cleanup (e.g., 'lab-abc123')",
+				Required:    false,
+				Example:     "lab-abc123",
+			},
+			{
+				Name:        "user_email",
+				Description: "Email of the user to cleanup (e.g., 'lab+abc123@spectrocloud.com')",
+				Required:    false,
+				Example:     "lab+abc123@spectrocloud.com",
+			},
+			{
+				Name:        "api_key_name",
+				Description: "Name of the API key to cleanup (e.g., 'lab-abc123-api-key')",
+				Required:    false,
+				Example:     "lab-abc123-api-key",
+			},
+		}
+	case "palette_tenant":
+		return []ParameterInfo{
+			{
+				Name:        "tenant_id",
+				Description: "ID of the tenant to cleanup (e.g., 'tenant-abc123')",
+				Required:    false,
+				Example:     "tenant-abc123",
+			},
+		}
+	case "proxmox_user":
+		return []ParameterInfo{
+			{
+				Name:        "username",
+				Description: "Proxmox username to cleanup (e.g., 'lab-abc123@pve')",
+				Required:    false,
+				Example:     "lab-abc123@pve",
+			},
+			{
+				Name:        "pool_name",
+				Description: "Resource pool name to cleanup (e.g., 'lab-abc123-pool')",
+				Required:    false,
+				Example:     "lab-abc123-pool",
+			},
+		}
+	case "terraform_cloud":
+		return []ParameterInfo{
+			{
+				Name:        "workspace_name",
+				Description: "Terraform Cloud workspace name to cleanup (e.g., 'lab-abc123-workspace')",
+				Required:    false,
+				Example:     "lab-abc123-workspace",
+			},
+		}
+	case "guacamole":
+		return []ParameterInfo{
+			{
+				Name:        "username",
+				Description: "Guacamole username to cleanup (e.g., 'lab-abc123')",
+				Required:    false,
+				Example:     "lab-abc123",
+			},
+		}
+	default:
+		return []ParameterInfo{
+			{
+				Name:        "lab_id",
+				Description: "Lab ID for context (used to construct resource names)",
+				Required:    false,
+				Example:     "abc123",
+			},
+		}
+	}
 }
 
 // GetServiceConfigs returns all service configurations

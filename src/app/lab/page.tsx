@@ -1,15 +1,11 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { PasswordToggleFieldWithCopy } from "@/components/ui/password-toggle-field";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Clock, ExternalLink, ShieldCheck, Info, Server, User, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { apiService } from "@/lib/api";
@@ -112,7 +108,7 @@ function LabSessionPageContent() {
 
     setStopping(true);
     try {
-      // Stop the lab (which will also delete and cleanup resources)
+      // Stop the lab and cleanup all resources
       await apiService.stopLab(lab.id);
       
       // Redirect to labs page after successful stop
@@ -210,7 +206,7 @@ function LabSessionPageContent() {
           countdown={overallCountdown} 
           onStopLab={() => setShowStopDialog(true)}
           stopping={stopping}
-          showStopButton={false}
+          showStopButton={true}
         />
 
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
@@ -230,7 +226,7 @@ function LabSessionPageContent() {
           <AlertDialogHeader>
             <AlertDialogTitle>Stop Lab</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to stop this lab? This will delete all resources and cannot be undone.
+              Are you sure you want to stop this lab? This will stop the lab, cleanup all resources, and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

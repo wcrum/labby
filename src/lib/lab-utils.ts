@@ -1,7 +1,7 @@
 // Utility functions for lab data conversion and manipulation
 
 import { LabResponse } from "@/lib/api";
-import { LabSession, Credential } from "@/types/lab";
+import { LabSession } from "@/types/lab";
 
 // Convert backend LabResponse to frontend LabSession format
 export function convertLabResponse(labResponse: LabResponse): LabSession {
@@ -21,6 +21,7 @@ export function convertLabResponse(labResponse: LabResponse): LabSession {
       expiresAt: cred.expires_at,
       notes: cred.notes,
     })),
+    usedServices: labResponse.used_services,
   };
 }
 

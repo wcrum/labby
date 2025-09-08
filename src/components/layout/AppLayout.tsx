@@ -10,6 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import {
   NavigationMenu,
   NavigationMenuContent,
+  NavigationMenuIndicator,
   NavigationMenuItem,
   NavigationMenuLink,
   NavigationMenuList,
@@ -64,15 +65,17 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
               {/* Left side - App title and navigation */}
               <div className="flex items-center space-x-6">
                 <div className="flex items-center space-x-3">
-                  <img 
-                    key={resolvedTheme}
-                    src={resolvedTheme === "dark" 
-                      ? "/SpectroCloud_Horizontal_dark-bkgd_RGB.png" 
-                      : "/SpectroCloud_Horizontal_light-bkgd_RGB.png"
-                    } 
-                    alt="SpectroCloud" 
-                    className="h-8 w-auto"
-                  />
+                  <Link href="/" className="hover:opacity-80 transition-opacity">
+                    <img 
+                      key={resolvedTheme}
+                      src={resolvedTheme === "dark" 
+                        ? "/SpectroCloud_Horizontal_dark-bkgd_RGB.png" 
+                        : "/SpectroCloud_Horizontal_light-bkgd_RGB.png"
+                      } 
+                      alt="SpectroCloud" 
+                      className="h-8 w-auto"
+                    />
+                  </Link>
                   <span className="text-sm text-muted-foreground font-medium"></span>
                 </div>
                 
@@ -97,7 +100,28 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                       </NavigationMenuLink>
                     </NavigationMenuItem>
                     
-                    {isAdmin && (
+                    <NavigationMenuItem>
+                      <NavigationMenuLink asChild>
+                        <Link href="/support" className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground rounded-md">
+                          <Users className="h-4 w-4" />
+                          Support
+                        </Link>
+                      </NavigationMenuLink>
+                    </NavigationMenuItem>
+                    
+                    
+                    <NavigationMenuIndicator />
+                  </NavigationMenuList>
+                  <NavigationMenuViewport />
+                </NavigationMenu>
+              </div>
+
+              {/* Right side - Admin Tools, User info and actions */}
+              <div className="flex items-center gap-3">
+                {/* Admin Tools Dropdown */}
+                {isAdmin && (
+                  <NavigationMenu className="admin-tools-menu">
+                    <NavigationMenuList>
                       <NavigationMenuItem>
                         <NavigationMenuTrigger className="bg-[#1E7A78] text-white border-0 shadow-lg transition-all duration-300 rounded-md px-4 py-2 h-auto w-auto inline-flex items-center justify-center gap-2 font-semibold text-sm hover:shadow-xl hover:scale-105 hover:bg-[#1a6b69] focus:outline-none focus:ring-2 focus:ring-[#1E7A78] focus:ring-offset-2 data-[state=open]:bg-[#1a6b69]">
                           <Shield className="h-4 w-4 animate-pulse" />
@@ -105,39 +129,28 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                         </NavigationMenuTrigger>
                         <NavigationMenuContent>
                           <div className="grid gap-4 p-6 w-[450px] bg-background/95 backdrop-blur-sm border border-[#1E7A78]/20 shadow-2xl rounded-md">
-                            {/* Featured Admin Dashboard */}
-                            <div className="row-span-3">
-                              <NavigationMenuLink asChild>
-                                <Link
-                                  href="/admin"
-                                  className="group flex h-full w-full select-none flex-col justify-end rounded-md bg-background/50 backdrop-blur-sm border border-[#1E7A78]/30 p-6 no-underline outline-none transition-all duration-300 hover:scale-105 hover:shadow-[#1E7A78]/25 hover:border-[#1E7A78]/50 relative overflow-hidden"
-                                >
-                                  <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                                  <div className="relative z-10">
-                                    <div className="flex items-center gap-3 mb-3">
-                                      <Shield className="h-8 w-8 text-[#1E7A78] animate-pulse" />
-                                      <div className="text-xl font-bold text-[#1E7A78]">
-                                        Admin Dashboard
-                                      </div>
-                                    </div>
-                                    <p className="text-sm leading-tight text-muted-foreground">
-                                      System overview, lab management, and user analytics
-                                    </p>
-                                    <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                                      Live System Status
-                                    </div>
-                                  </div>
-                                </Link>
-                              </NavigationMenuLink>
-                            </div>
+                            {/* Admin Dashboard */}
+                            <NavigationMenuLink asChild>
+                              <Link
+                                href="/admin"
+                                className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
+                              >
+                                <div className="text-sm font-semibold leading-none flex items-center gap-2 text-[#1E7A78]">
+                                  <Shield className="h-5 w-5 group-hover:scale-110 transition-transform duration-300" />
+                                  Admin Dashboard
+                                </div>
+                                <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">
+                                  System overview, lab management, and user analytics
+                                </p>
+                              </Link>
+                            </NavigationMenuLink>
                             
                             {/* Admin Tools Grid */}
                             <div className="grid grid-cols-2 gap-3">
                               <NavigationMenuLink asChild>
                                 <Link
                                   href="/admin/organizations"
-                                  className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 hover:scale-105 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
+                                  className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
                                 >
                                   <div className="text-sm font-semibold leading-none flex items-center gap-2 text-[#1E7A78]">
                                     <Building2 className="h-5 w-5 group-hover:rotate-12 transition-transform duration-300" />
@@ -152,7 +165,7 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                               <NavigationMenuLink asChild>
                                 <Link
                                   href="/admin/users"
-                                  className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 hover:scale-105 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
+                                  className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
                                 >
                                   <div className="text-sm font-semibold leading-none flex items-center gap-2 text-[#1E7A78]">
                                     <Users className="h-5 w-5 group-hover:scale-110 transition-transform duration-300" />
@@ -167,7 +180,7 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                               <NavigationMenuLink asChild>
                                 <Link
                                   href="/admin/cleanup"
-                                  className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 hover:scale-105 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
+                                  className="group block select-none space-y-2 rounded-md p-4 leading-none no-underline outline-none transition-all duration-300 bg-background/30 backdrop-blur-sm border border-[#1E7A78]/20 hover:border-[#1E7A78]/40 hover:shadow-lg hover:shadow-[#1E7A78]/10"
                                 >
                                   <div className="text-sm font-semibold leading-none flex items-center gap-2 text-[#1E7A78]">
                                     <Trash2 className="h-5 w-5 group-hover:rotate-12 transition-transform duration-300" />
@@ -182,23 +195,12 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                           </div>
                         </NavigationMenuContent>
                       </NavigationMenuItem>
-                    )}
-                    
-                    <NavigationMenuItem>
-                      <NavigationMenuLink asChild>
-                        <Link href="/support" className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground rounded-md">
-                          <Users className="h-4 w-4" />
-                          Support
-                        </Link>
-                      </NavigationMenuLink>
-                    </NavigationMenuItem>
-                  </NavigationMenuList>
-                  <NavigationMenuViewport />
-                </NavigationMenu>
-              </div>
-
-              {/* Right side - User info and actions */}
-              <div className="flex items-center gap-3">
+                      <NavigationMenuIndicator />
+                    </NavigationMenuList>
+                    <NavigationMenuViewport />
+                  </NavigationMenu>
+                )}
+                
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="text-xs">
                     {user.role}
@@ -262,7 +264,7 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
       )}
 
       {/* Main content area */}
-      <main className="flex-1 relative z-0">
+      <main className="flex-1 relative z-10">
         {children}
       </main>
     </div>

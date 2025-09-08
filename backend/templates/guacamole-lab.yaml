@@ -1,0 +1,9 @@
+name: "Guacamole Lab"
+id: "guacamole-lab"
+description: "A lab environment with Apache Guacamole remote desktop access."
+expiration_duration: "2h"
+owner: "admin@spectrocloud.com"
+services:
+  - name: "guacamole"
+    service_id: "guacamole"
+    description: "Apache Guacamole remote desktop access"

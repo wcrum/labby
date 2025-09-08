@@ -62,6 +62,11 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 				"Setting Variables",
 				"Triggering Run",
 			}
+		case "guacamole":
+			steps = []string{
+				"Connecting to Guacamole",
+				"Creating User Account",
+			}
 		default:
 			steps = []string{"Initializing"}
 		}
@@ -90,6 +95,8 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 			s.provisionPaletteTenantService(labID, serviceConfig)
 		case "terraform_cloud":
 			s.provisionTerraformCloudService(labID, serviceConfig)
+		case "guacamole":
+			s.provisionGuacamoleService(labID, serviceConfig)
 		default:
 			s.progressTracker.AddLog(labID, fmt.Sprintf("Unknown service type: %s", serviceConfig.Type))
 		}

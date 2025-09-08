@@ -4,11 +4,10 @@ import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PasswordToggleFieldWithCopy } from "@/components/ui/password-toggle-field";
+import { InputWithCopy } from "@/components/ui/input-with-copy";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +19,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { 
-  Copy, 
   RefreshCw, 
   ExternalLink, 
   ShieldCheck, 
@@ -453,28 +451,11 @@ function AdminPageContent() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <Input value={cred.username} readOnly className="font-mono text-sm h-8" />
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="outline"
-                                          size="icon"
-                                          className="h-8 w-8"
-                                          onClick={() => {
-                                            try {
-                                              if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(cred.username);
-                                            } catch {}
-                                          }}
-                                        >
-                                          <Copy className="h-4 w-4"/>
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Copy username</TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
+                                <InputWithCopy 
+                                  value={cred.username} 
+                                  placeholder="Username"
+                                  className="font-mono text-sm max-w-xs"
+                                />
                               </TableCell>
                               <TableCell>
                                 <PasswordToggleFieldWithCopy 

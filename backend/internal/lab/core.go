@@ -37,7 +37,7 @@ func NewService() *Service {
 
 	return &Service{
 		labs:                 make(map[string]*models.Lab),
-		serviceManager:       services.NewServiceManager(),
+		serviceManager:       services.NewServiceManager(serviceConfigManager),
 		progressTracker:      NewProgressTracker(),
 		templateManager:      templateManager,
 		templateLoader:       templateLoader,
@@ -247,14 +247,29 @@ func (s *Service) ConvertLabToResponse(lab *models.Lab, authService interface{})
 		}
 	}
 
+	// Enrich used services with service config information
+	var enrichedServices []models.ServiceReference
+	for _, serviceID := range lab.UsedServices {
+		if serviceConfig, exists := s.serviceConfigManager.GetServiceConfig(serviceID); exists {
+			enrichedServices = append(enrichedServices, models.ServiceReference{
+				Name:        serviceConfig.Name,
+				ServiceID:   serviceConfig.ID,
+				Description: serviceConfig.Description,
+				Type:        serviceConfig.Type,
+				Logo:        serviceConfig.Logo,
+			})
+		}
+	}
+
 	return &models.LabResponse{
-		ID:          lab.ID,
-		Name:        lab.Name,
-		Status:      lab.Status,
-		Owner:       owner,
-		StartedAt:   lab.StartedAt,
-		EndsAt:      lab.EndsAt,
-		Credentials: lab.Credentials,
+		ID:           lab.ID,
+		Name:         lab.Name,
+		Status:       lab.Status,
+		Owner:        owner,
+		StartedAt:    lab.StartedAt,
+		EndsAt:       lab.EndsAt,
+		Credentials:  lab.Credentials,
+		UsedServices: enrichedServices,
 	}
 }
 

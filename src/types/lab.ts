@@ -18,6 +18,13 @@ export type LabSession = {
   endsAt?: string;
   owner: { name: string; email: string };
   credentials: Credential[];
+  usedServices?: Array<{
+    name: string;
+    service_id: string;
+    description: string;
+    type?: string;
+    logo?: string;
+  }>;
 };
 
 export type LabStatus = LabSession['status'];

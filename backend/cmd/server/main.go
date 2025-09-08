@@ -137,8 +137,16 @@ func main() {
 			return
 		}
 
-		// If file doesn't exist, serve index.html for SPA routing
-		c.File("./static/index.html")
+		// Check if this is a valid Next.js route by looking for the corresponding HTML file
+		// Next.js generates HTML files for each route in the out directory
+		htmlPath := filepath.Join("./static", requestedPath, "index.html")
+		if _, err := os.Stat(htmlPath); err == nil {
+			c.File(htmlPath)
+			return
+		}
+
+		// If no valid route found, serve 404 page
+		c.File("./static/404.html")
 	})
 
 	// Health check endpoint
@@ -187,8 +195,11 @@ func main() {
 		admin.POST("/labs/:id/stop", handler.AdminStopLab)
 		admin.DELETE("/labs/:id", handler.AdminDeleteLab)
 		admin.POST("/labs/:id/cleanup", handler.CleanupLab)
-		admin.POST("/palette-project/cleanup", handler.AdminCleanupPaletteProject)
-		admin.POST("/terraform-cloud/cleanup", handler.AdminCleanupTerraformCloud)
+		// Cleanup endpoints
+		admin.POST("/cleanup/service", handler.AdminCleanupService)
+		admin.POST("/cleanup/service-by-id", handler.AdminCleanupServiceByID)
+		admin.POST("/cleanup/lab", handler.AdminCleanupByLab)
+		admin.GET("/cleanup/services", handler.AdminGetAvailableServices)
 		admin.GET("/users", handler.GetUsers)
 		admin.POST("/users", handler.CreateUser)
 		admin.PUT("/users/:id/role", handler.UpdateUserRole)

@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { AlertTriangle, RefreshCw, Trash2, Clock, User } from 'lucide-react';
 import { apiService } from '@/lib/api';
-import { LabSession } from '@/app/lab/page';
+import { LabSession } from '@/types/lab';
 
 interface LabFailedViewProps {
   labId: string;
@@ -21,6 +21,10 @@ export function LabFailedView({ labId, lab, onCleanup }: LabFailedViewProps) {
 
   const handleCleanup = async () => {
     if (!lab || isCleaningUp) return;
+    
+    if (!confirm(`Are you sure you want to cleanup failed lab "${lab.name}"? This will permanently delete all resources and cannot be undone.`)) {
+      return;
+    }
     
     setIsCleaningUp(true);
     try {

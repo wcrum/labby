@@ -105,9 +105,23 @@ func (s *Service) StopLab(labID string) error {
 		return ErrLabNotFound
 	}
 
+	// Set lab status to expired
 	lab.Status = models.LabStatusExpired
 	lab.EndsAt = time.Now()
 	lab.UpdatedAt = time.Now()
+
+	// Perform cleanup of lab services
+	cleanupCtx := &interfaces.CleanupContext{
+		LabID:   labID,
+		Context: context.Background(),
+		Lab:     lab,
+	}
+
+	// Execute cleanup (don't fail the stop operation if cleanup fails)
+	if err := s.serviceManager.CleanupLabServices(cleanupCtx); err != nil {
+		// Log the cleanup error but don't fail the stop operation
+		fmt.Printf("StopLab: Cleanup failed for lab %s: %v\n", labID, err)
+	}
 
 	return nil
 }
@@ -120,6 +134,22 @@ func (s *Service) CleanupExpiredLabs() {
 	now := time.Now()
 	for labID, lab := range s.labs {
 		if now.After(lab.EndsAt) {
+			// Create cleanup context for expired lab
+			cleanupCtx := &interfaces.CleanupContext{
+				LabID:   labID,
+				Context: context.Background(),
+				Lab:     lab,
+			}
+
+			// Cleanup lab services before removing from memory
+			if err := s.serviceManager.CleanupLabServices(cleanupCtx); err != nil {
+				fmt.Printf("Warning: Failed to cleanup expired lab services for lab %s: %v\n", labID, err)
+			}
+
+			// Cleanup progress tracking
+			s.progressTracker.CleanupProgress(labID)
+
+			// Remove the lab from memory
 			delete(s.labs, labID)
 		}
 	}
@@ -138,6 +168,18 @@ func (s *Service) CleanupFailedLabs() {
 		if lab.Status == models.LabStatusError {
 			timeSinceError := now.Sub(lab.UpdatedAt)
 			if timeSinceError > errorThreshold {
+				// Create cleanup context for failed lab
+				cleanupCtx := &interfaces.CleanupContext{
+					LabID:   labID,
+					Context: context.Background(),
+					Lab:     lab,
+				}
+
+				// Cleanup lab services before removing from memory
+				if err := s.serviceManager.CleanupLabServices(cleanupCtx); err != nil {
+					fmt.Printf("Warning: Failed to cleanup failed lab services for lab %s: %v\n", labID, err)
+				}
+
 				// Cleanup progress tracking
 				s.progressTracker.CleanupProgress(labID)
 				// Remove the lab

@@ -67,6 +67,8 @@ func (scl *ServiceConfigLoader) LoadServiceConfigFromFile(filePath string) error
 	if serviceConfig.UpdatedAt.IsZero() {
 		serviceConfig.UpdatedAt = time.Now()
 	}
+	// Set IsActive to true by default for all service configs
+	serviceConfig.IsActive = true
 
 	fmt.Printf("ServiceConfigLoader.LoadServiceConfigFromFile: Loaded service config %s (ID: %s, Type: %s, Active: %v)\n",
 		serviceConfig.Name, serviceConfig.ID, serviceConfig.Type, serviceConfig.IsActive)
@@ -100,7 +102,7 @@ func (scl *ServiceConfigLoader) validateServiceConfig(config *models.ServiceConf
 
 	// Validate service type
 	switch config.Type {
-	case "palette_project", "proxmox_user", "palette_tenant", "terraform_cloud":
+	case "palette_project", "proxmox_user", "palette_tenant", "terraform_cloud", "guacamole":
 		// Valid service types
 	default:
 		return fmt.Errorf("unsupported service type: %s", config.Type)
@@ -157,6 +159,8 @@ func (scl *ServiceConfigLoader) LoadServiceLimitsFromFile(filePath string) error
 		if limits[i].UpdatedAt.IsZero() {
 			limits[i].UpdatedAt = time.Now()
 		}
+		// Set IsActive to true by default for all service limits
+		limits[i].IsActive = true
 
 		fmt.Printf("ServiceConfigLoader.LoadServiceLimitsFromFile: Processing limit %d: ServiceID=%s, MaxLabs=%d, Active=%v\n",
 			i, limits[i].ServiceID, limits[i].MaxLabs, limits[i].IsActive)
