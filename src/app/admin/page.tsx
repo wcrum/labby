@@ -35,6 +35,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { apiService, ServiceUsage, ServiceConfig, ServiceLimit } from "@/lib/api";
 import { convertLabResponses } from "@/lib/lab-utils";
 import { useAllCountdowns } from "@/hooks/useCountdown";
+import { AdminPageSkeleton } from "@/components/ui/loading-skeleton";
 
 
 
@@ -166,21 +167,7 @@ function AdminPageContent() {
 
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-4">
-        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {[0,1,2,3].map((_, i) => (
-          <div key={i} className="h-24 bg-muted animate-pulse rounded-xl" />
-        ))}
-        </div>
-        <div className="grid grid-cols-1 gap-4">
-          {[0,1,2].map((_, i) => (
-            <div key={i} className="h-32 bg-muted animate-pulse rounded-xl" />
-          ))}
-        </div>
-      </div>
-    );
+    return <AdminPageSkeleton />;
   }
 
   return (

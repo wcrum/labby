@@ -24,20 +24,17 @@ import { LabStartingView } from "@/components/lab/LabStartingView";
 import { LabFailedView } from "@/components/lab/LabFailedView";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { LabSession } from "@/types/lab";
-import { convertLabResponse } from "@/lib/lab-utils";
 import { useCountdown } from "@/hooks/useCountdown";
+import { useLabData } from "@/hooks/useLabData";
 import { LabHeader } from "@/components/lab/shared/LabHeader";
 import { LabCredentials } from "@/components/lab/shared/LabCredentials";
 import { LabInfoCards } from "@/components/lab/shared/LabInfoCards";
-
-async function fetchLabSession(labId: string): Promise<LabSession> {
-  const labResponse = await apiService.getLab(labId);
-  return convertLabResponse(labResponse);
-}
-
+import { LabPageSkeleton } from "@/components/ui/loading-skeleton";
 
 function LabSessionPageContent() {
   const [labId, setLabId] = useState<string>("");
+  const [stopping, setStopping] = useState(false);
+  const [showStopDialog, setShowStopDialog] = useState(false);
 
   // Read labId from URL parameters on client side
   useEffect(() => {
@@ -49,58 +46,20 @@ function LabSessionPageContent() {
       }
     }
   }, []);
-  const [lab, setLab] = useState<LabSession | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stopping, setStopping] = useState(false);
-  const [showStopDialog, setShowStopDialog] = useState(false);
 
+  // Use the existing useLabData hook instead of manual fetching
+  const { lab, loading, error, refetch } = useLabData(labId, { 
+    pollInterval: 15000,
+    autoFetch: !!labId 
+  });
 
   const totalMs = lab?.startedAt && lab?.endsAt ? Math.max(0, new Date(lab.endsAt).getTime() - new Date(lab.startedAt).getTime()) : undefined;
   const overallCountdown = useCountdown(lab?.endsAt, totalMs);
   const progressValue = Math.min(100, Math.max(0, 100 - overallCountdown.pct));
 
-  useEffect(() => {
-    let live = true;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchLabSession(labId);
-        if (!live) return;
-        setLab(data);
-      } catch (err) {
-        if (!live) return;
-        setError(err instanceof Error ? err.message : "Failed to load lab");
-        setLab(null);
-      } finally {
-        if (live) {
-          setLoading(false);
-        }
-      }
-    })();
-    
-    const poll = setInterval(async () => {
-      try {
-        const data = await fetchLabSession(labId);
-        if (!live) return;
-        setLab(data);
-        setError(null);
-      } catch (err) {
-        if (!live) return;
-        setError(err instanceof Error ? err.message : "Failed to load lab");
-        setLab(null);
-      }
-    }, 15000);
-    
-    return () => { live = false; clearInterval(poll); };
-  }, [labId]);
-
   const handleLabReady = () => {
     // Refresh the lab data when it becomes ready
-    fetchLabSession(labId).then(setLab).catch(err => {
-      setError(err instanceof Error ? err.message : "Failed to load lab");
-    });
+    refetch();
   };
 
   const handleStopLab = async () => {
@@ -115,23 +74,13 @@ function LabSessionPageContent() {
       window.location.href = '/labs';
     } catch (error) {
       console.error('Failed to stop lab:', error);
-      setError('Failed to stop lab. Please try again.');
     } finally {
       setStopping(false);
     }
   };
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-4">
-        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[0,1].map((i) => (
-            <div key={i} className="h-56 bg-muted animate-pulse rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
+    return <LabPageSkeleton />;
   }
 
   if (error) {
@@ -163,16 +112,7 @@ function LabSessionPageContent() {
   }
 
   if (!lab) {
-    return (
-      <div className="p-6 space-y-4">
-        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[0,1].map((i) => (
-            <div key={i} className="h-56 bg-muted animate-pulse rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
+    return <LabPageSkeleton />;
   }
 
   // Show starting view if lab is in starting status

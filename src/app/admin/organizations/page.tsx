@@ -5,7 +5,23 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import * as Dialog from "@radix-ui/react-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Plus, 
   Users, 
@@ -17,6 +33,7 @@ import {
 import { apiService, Organization } from "@/lib/api";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { OrganizationsPageSkeleton } from "@/components/ui/loading-skeleton";
 
 function OrganizationsPageContent() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -29,6 +46,10 @@ function OrganizationsPageContent() {
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [newOrg, setNewOrg] = useState({ name: '', description: '', domain: '' });
   const [newInvite, setNewInvite] = useState({ email: '', role: 'member' });
+  
+  // Alert dialog state
+  const [showSuccessAlert, setShowSuccessAlert] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     fetchOrganizations();
@@ -64,21 +85,17 @@ function OrganizationsPageContent() {
       setNewInvite({ email: '', role: 'member' });
       setShowCreateInvite(false);
       
-      // Show the invite link
+      // Show the invite link in alert dialog
       const inviteUrl = `${window.location.origin}/invite?code=${invite.id}`;
-      alert(`Invitation created successfully!\n\nInvite Link: ${inviteUrl}\n\nCopy this link and share it with the user.`);
+      setSuccessMessage(`Invitation created successfully!\n\nInvite Link: ${inviteUrl}\n\nCopy this link and share it with the user.`);
+      setShowSuccessAlert(true);
     } catch (error) {
       console.error('Failed to create invite:', error);
     }
   };
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-4">
-        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-        <div className="h-96 bg-muted animate-pulse rounded-xl" />
-      </div>
-    );
+    return <OrganizationsPageSkeleton />;
   }
 
   return (
@@ -89,20 +106,20 @@ function OrganizationsPageContent() {
             <h1 className="text-3xl md:text-4xl font-semibold">Organization Management</h1>
             <p className="text-muted-foreground">Manage organizations and their members</p>
           </div>
-          <Dialog.Root open={showCreateOrg} onOpenChange={setShowCreateOrg}>
-            <Dialog.Trigger asChild>
+          <Dialog open={showCreateOrg} onOpenChange={setShowCreateOrg}>
+            <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
                 Create Organization
               </Button>
-            </Dialog.Trigger>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-              <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background border p-6 rounded-lg shadow-lg w-full max-w-md">
-                <Dialog.Title className="text-lg font-semibold mb-2">Create Organization</Dialog.Title>
-                <Dialog.Description className="text-sm text-muted-foreground mb-4">
+            </DialogTrigger>
+            <DialogContent className="w-full max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create Organization</DialogTitle>
+                <DialogDescription>
                   Create a new organization to manage users and resources.
-                </Dialog.Description>
+                </DialogDescription>
+              </DialogHeader>
                 
                 <div className="space-y-4">
                   <div className="space-y-2">
@@ -142,9 +159,8 @@ function OrganizationsPageContent() {
                     Create
                   </Button>
                 </div>
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
+            </DialogContent>
+          </Dialog>
         </header>
 
         {/* Error Display */}
@@ -186,7 +202,7 @@ function OrganizationsPageContent() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <Dialog.Root open={showCreateInvite && selectedOrg?.id === org.id} onOpenChange={(open) => {
+                  <Dialog open={showCreateInvite && selectedOrg?.id === org.id} onOpenChange={(open) => {
                     if (open) {
                       setSelectedOrg(org);
                       setShowCreateInvite(true);
@@ -194,19 +210,19 @@ function OrganizationsPageContent() {
                       setShowCreateInvite(false);
                     }
                   }}>
-                    <Dialog.Trigger asChild>
+                    <DialogTrigger asChild>
                       <Button variant="outline">
                         <Mail className="h-4 w-4 mr-2" />
                         Send Invite
                       </Button>
-                    </Dialog.Trigger>
-                    <Dialog.Portal>
-                      <Dialog.Overlay className="fixed inset-0 bg-black/50" />
-                      <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background border p-6 rounded-lg shadow-lg w-full max-w-md">
-                        <Dialog.Title className="text-lg font-semibold mb-2">Send Invitation</Dialog.Title>
-                        <Dialog.Description className="text-sm text-muted-foreground mb-4">
+                    </DialogTrigger>
+                    <DialogContent className="w-full max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Send Invitation</DialogTitle>
+                        <DialogDescription>
                           Send an invitation to join {org.name}.
-                        </Dialog.Description>
+                        </DialogDescription>
+                      </DialogHeader>
                         
                         <div className="space-y-4">
                           <div className="space-y-2">
@@ -241,9 +257,8 @@ function OrganizationsPageContent() {
                             Send Invite
                           </Button>
                         </div>
-                      </Dialog.Content>
-                    </Dialog.Portal>
-                  </Dialog.Root>
+                    </DialogContent>
+                  </Dialog>
                   <Button variant="outline" size="icon">
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -264,18 +279,34 @@ function OrganizationsPageContent() {
               <p className="text-muted-foreground mb-4">
                 Get started by creating your first organization.
               </p>
-                  <Dialog.Root open={showCreateOrg} onOpenChange={setShowCreateOrg}>
-                    <Dialog.Trigger asChild>
+                  <Dialog open={showCreateOrg} onOpenChange={setShowCreateOrg}>
+                    <DialogTrigger asChild>
                       <Button>
                         <Plus className="h-4 w-4 mr-2" />
                         Create Organization
                       </Button>
-                    </Dialog.Trigger>
-                  </Dialog.Root>
+                    </DialogTrigger>
+                  </Dialog>
             </CardContent>
           </Card>
         )}
 
+        {/* Success Alert Dialog */}
+        <AlertDialog open={showSuccessAlert} onOpenChange={setShowSuccessAlert}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Invitation Created</AlertDialogTitle>
+              <AlertDialogDescription className="whitespace-pre-line">
+                {successMessage}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setShowSuccessAlert(false)}>
+                OK
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </div>
     </AppLayout>

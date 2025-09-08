@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { UsersPageSkeleton } from "@/components/ui/loading-skeleton";
 import { apiService, UserWithOrganization } from "@/lib/api";
 
 function UsersPageContent() {
@@ -56,10 +57,7 @@ function UsersPageContent() {
   if (loading) {
     return (
       <AppLayout>
-        <div className="p-6 space-y-4">
-          <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-          <div className="h-96 bg-muted animate-pulse rounded-xl" />
-        </div>
+        <UsersPageSkeleton />
       </AppLayout>
     );
   }

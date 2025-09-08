@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle, AlertCircle, Clock, Building2, User } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { LabPageSkeleton } from "@/components/ui/loading-skeleton";
 import { useSearchParams } from "next/navigation";
 
 interface Invite {
@@ -123,12 +124,7 @@ function InvitePageContent() {
   };
 
   if (loading) {
-    return (
-      <div className="p-6 space-y-4">
-        <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-        <div className="h-96 bg-muted animate-pulse rounded-xl" />
-      </div>
-    );
+    return <LabPageSkeleton />;
   }
 
   if (error) {

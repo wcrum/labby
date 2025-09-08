@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { RefreshCw, Server, Trash2, AlertTriangle, CheckCircle, Info, Settings, Zap } from "lucide-react";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -47,6 +57,10 @@ function CleanupPageContent() {
   const [serviceConfigId, setServiceConfigId] = useState<string>("");
   const [labId, setLabId] = useState("");
   const [cleanupLoading, setCleanupLoading] = useState(false);
+  
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState("");
 
   // Load available services on component mount
   useEffect(() => {
@@ -82,11 +96,13 @@ function CleanupPageContent() {
       return;
     }
 
-    const confirmMessage = `Are you sure you want to cleanup service config "${serviceConfigId}" for lab "${labId.trim()}"? This will permanently delete resources and cannot be undone.`;
-    if (!confirm(confirmMessage)) {
-      return;
-    }
+    const message = `Are you sure you want to cleanup service config "${serviceConfigId}" for lab "${labId.trim()}"? This will permanently delete resources and cannot be undone.`;
+    setConfirmMessage(message);
+    setShowConfirmDialog(true);
+  };
 
+  const handleConfirmCleanup = async () => {
+    setShowConfirmDialog(false);
     setCleanupLoading(true);
     setCleanupMessage("");
 
@@ -345,6 +361,26 @@ function CleanupPageContent() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Confirmation Dialog */}
+        <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Cleanup</AlertDialogTitle>
+              <AlertDialogDescription>
+                {confirmMessage}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowConfirmDialog(false)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmCleanup}>
+                Continue
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );

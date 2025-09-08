@@ -4,6 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { AlertTriangle, RefreshCw, Trash2, Clock, User } from 'lucide-react';
 import { apiService } from '@/lib/api';
 import { LabSession } from '@/types/lab';
@@ -18,14 +28,15 @@ interface LabFailedViewProps {
 export function LabFailedView({ labId, lab, onCleanup }: LabFailedViewProps) {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const handleCleanup = async () => {
     if (!lab || isCleaningUp) return;
-    
-    if (!confirm(`Are you sure you want to cleanup failed lab "${lab.name}"? This will permanently delete all resources and cannot be undone.`)) {
-      return;
-    }
-    
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmCleanup = async () => {
+    setShowConfirmDialog(false);
     setIsCleaningUp(true);
     try {
       await apiService.cleanupFailedLab(labId);
@@ -171,6 +182,26 @@ export function LabFailedView({ labId, lab, onCleanup }: LabFailedViewProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Cleanup</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cleanup failed lab "{lab.name}"? This will permanently delete all resources and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowConfirmDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmCleanup}>
+              Clean Up
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
