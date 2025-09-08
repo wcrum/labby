@@ -12,6 +12,16 @@ import {
   AlertTriangle,
   Building2
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { apiService, UserWithOrganization } from "@/lib/api";
@@ -20,6 +30,9 @@ function UsersPageContent() {
   const [users, setUsers] = useState<UserWithOrganization[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showRoleChangeDialog, setShowRoleChangeDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserWithOrganization | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -145,8 +158,8 @@ function UsersPageContent() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              // TODO: Implement role change functionality
-                              alert('Role change functionality coming soon');
+                              setSelectedUser(user);
+                              setShowRoleChangeDialog(true);
                             }}
                           >
                             Change Role
@@ -155,10 +168,8 @@ function UsersPageContent() {
                             variant="destructive"
                             size="sm"
                             onClick={() => {
-                              if (confirm(`Are you sure you want to delete user "${user.name}"? This action cannot be undone.`)) {
-                                // TODO: Implement user deletion
-                                alert('User deletion functionality coming soon');
-                              }
+                              setSelectedUser(user);
+                              setShowDeleteDialog(true);
                             }}
                           >
                             Delete
@@ -179,6 +190,48 @@ function UsersPageContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Role Change Dialog */}
+      <AlertDialog open={showRoleChangeDialog} onOpenChange={setShowRoleChangeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change User Role</AlertDialogTitle>
+            <AlertDialogDescription>
+              Role change functionality is coming soon. This feature will allow you to change the role of {selectedUser?.name}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => setShowRoleChangeDialog(false)}>
+              OK
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete User Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete user &quot;{selectedUser?.name}&quot;? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                // TODO: Implement user deletion
+                setShowDeleteDialog(false);
+              }}
+            >
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

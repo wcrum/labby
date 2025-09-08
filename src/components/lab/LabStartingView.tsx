@@ -88,19 +88,17 @@ export function LabStartingView({ labId, onLabReady }: LabStartingViewProps) {
         if (allServicesCompleted || progressComplete) {
           if (!isCompleting) {
             setIsCompleting(true);
-            console.log("Lab appears complete, verifying status...");
           }
           
           // Double-check lab status before redirecting
           try {
             const labData = await apiService.getLab(labId);
             if (labData.status === 'ready') {
-              console.log("Lab confirmed ready, redirecting...");
               onLabReady();
               return;
             }
           } catch (statusErr) {
-            console.error("Failed to verify lab status:", statusErr);
+            // Lab status verification failed, continue polling
           }
         }
       }

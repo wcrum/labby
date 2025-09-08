@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import * as Dialog from "@radix-ui/react-dialog";
 import { 
   Plus, 
   Users, 
@@ -88,10 +89,62 @@ function OrganizationsPageContent() {
             <h1 className="text-3xl md:text-4xl font-semibold">Organization Management</h1>
             <p className="text-muted-foreground">Manage organizations and their members</p>
           </div>
-          <Button onClick={() => setShowCreateOrg(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Organization
-          </Button>
+          <Dialog.Root open={showCreateOrg} onOpenChange={setShowCreateOrg}>
+            <Dialog.Trigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Organization
+              </Button>
+            </Dialog.Trigger>
+            <Dialog.Portal>
+              <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+              <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background border p-6 rounded-lg shadow-lg w-full max-w-md">
+                <Dialog.Title className="text-lg font-semibold mb-2">Create Organization</Dialog.Title>
+                <Dialog.Description className="text-sm text-muted-foreground mb-4">
+                  Create a new organization to manage users and resources.
+                </Dialog.Description>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="org-name">Name</Label>
+                    <Input
+                      id="org-name"
+                      value={newOrg.name}
+                      onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
+                      placeholder="Organization name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="org-description">Description</Label>
+                    <Input
+                      id="org-description"
+                      value={newOrg.description}
+                      onChange={(e) => setNewOrg({ ...newOrg, description: e.target.value })}
+                      placeholder="Organization description"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="org-domain">Domain (optional)</Label>
+                    <Input
+                      id="org-domain"
+                      value={newOrg.domain}
+                      onChange={(e) => setNewOrg({ ...newOrg, domain: e.target.value })}
+                      placeholder="example.com"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 mt-6">
+                  <Button variant="outline" onClick={() => setShowCreateOrg(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleCreateOrg} disabled={!newOrg.name}>
+                    Create
+                  </Button>
+                </div>
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
         </header>
 
         {/* Error Display */}
@@ -133,13 +186,64 @@ function OrganizationsPageContent() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" onClick={() => {
-                    setSelectedOrg(org);
-                    setShowCreateInvite(true);
+                  <Dialog.Root open={showCreateInvite && selectedOrg?.id === org.id} onOpenChange={(open) => {
+                    if (open) {
+                      setSelectedOrg(org);
+                      setShowCreateInvite(true);
+                    } else {
+                      setShowCreateInvite(false);
+                    }
                   }}>
-                    <Mail className="h-4 w-4 mr-2" />
-                    Send Invite
-                  </Button>
+                    <Dialog.Trigger asChild>
+                      <Button variant="outline">
+                        <Mail className="h-4 w-4 mr-2" />
+                        Send Invite
+                      </Button>
+                    </Dialog.Trigger>
+                    <Dialog.Portal>
+                      <Dialog.Overlay className="fixed inset-0 bg-black/50" />
+                      <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background border p-6 rounded-lg shadow-lg w-full max-w-md">
+                        <Dialog.Title className="text-lg font-semibold mb-2">Send Invitation</Dialog.Title>
+                        <Dialog.Description className="text-sm text-muted-foreground mb-4">
+                          Send an invitation to join {org.name}.
+                        </Dialog.Description>
+                        
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="invite-email">Email</Label>
+                            <Input
+                              id="invite-email"
+                              type="email"
+                              value={newInvite.email}
+                              onChange={(e) => setNewInvite({ ...newInvite, email: e.target.value })}
+                              placeholder="user@example.com"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="invite-role">Role</Label>
+                            <select
+                              id="invite-role"
+                              value={newInvite.role}
+                              onChange={(e) => setNewInvite({ ...newInvite, role: e.target.value })}
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <option value="member">Member</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2 mt-6">
+                          <Button variant="outline" onClick={() => setShowCreateInvite(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleCreateInvite} disabled={!newInvite.email || !selectedOrg}>
+                            Send Invite
+                          </Button>
+                        </div>
+                      </Dialog.Content>
+                    </Dialog.Portal>
+                  </Dialog.Root>
                   <Button variant="outline" size="icon">
                     <Edit className="h-4 w-4" />
                   </Button>
@@ -160,110 +264,19 @@ function OrganizationsPageContent() {
               <p className="text-muted-foreground mb-4">
                 Get started by creating your first organization.
               </p>
-              <Button onClick={() => setShowCreateOrg(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Organization
-              </Button>
+                  <Dialog.Root open={showCreateOrg} onOpenChange={setShowCreateOrg}>
+                    <Dialog.Trigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create Organization
+                      </Button>
+                    </Dialog.Trigger>
+                  </Dialog.Root>
             </CardContent>
           </Card>
         )}
 
-        {/* Create Organization Modal */}
-        {showCreateOrg && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle>Create Organization</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="org-name">Name</Label>
-                  <Input
-                    id="org-name"
-                    value={newOrg.name}
-                    onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
-                    placeholder="Organization name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-description">Description</Label>
-                  <Input
-                    id="org-description"
-                    value={newOrg.description}
-                    onChange={(e) => setNewOrg({ ...newOrg, description: e.target.value })}
-                    placeholder="Organization description"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-domain">Domain (optional)</Label>
-                  <Input
-                    id="org-domain"
-                    value={newOrg.domain}
-                    onChange={(e) => setNewOrg({ ...newOrg, domain: e.target.value })}
-                    placeholder="example.com"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleCreateOrg} disabled={!newOrg.name}>
-                    Create
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowCreateOrg(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
-        {/* Create Invite Modal */}
-        {showCreateInvite && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <Card className="w-full max-w-md">
-              <CardHeader>
-                <CardTitle>Send Invitation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="invite-email">Email</Label>
-                  <Input
-                    id="invite-email"
-                    type="email"
-                    value={newInvite.email}
-                    onChange={(e) => setNewInvite({ ...newInvite, email: e.target.value })}
-                    placeholder="user@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="invite-role">Role</Label>
-                  <select
-                    id="invite-role"
-                    value={newInvite.role}
-                    onChange={(e) => setNewInvite({ ...newInvite, role: e.target.value })}
-                    className="w-full p-2 border rounded-md"
-                  >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Organization</Label>
-                  <p className="text-sm text-muted-foreground">
-                    {selectedOrg?.name || 'No organization selected'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleCreateInvite} disabled={!newInvite.email || !selectedOrg}>
-                    Send Invite
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowCreateInvite(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
       </div>
     </AppLayout>
   );

@@ -442,7 +442,6 @@ class ApiService {
     } catch (error) {
       // If user has no organization (404), return null
       // Other errors should be logged but still return null
-      console.log('DEBUG: getUserOrganization error:', error);
       return null;
     }
   }

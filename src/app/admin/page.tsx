@@ -8,10 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PasswordToggleFieldWithCopy } from "@/components/ui/password-toggle-field";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Copy, 
-  Eye, 
-  EyeOff, 
   RefreshCw, 
   ExternalLink, 
   ShieldCheck, 
@@ -22,106 +31,27 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { LabSession } from "../lab/page";
+import { LabSession } from "@/types/lab";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { apiService, ServiceUsage, ServiceConfig, ServiceLimit } from "@/lib/api";
+import { convertLabResponses } from "@/lib/lab-utils";
+import { useAllCountdowns } from "@/hooks/useCountdown";
 
 
 
 // Fetch all lab sessions from the API
 async function fetchAllLabSessions(): Promise<LabSession[]> {
   try {
-    console.log('Fetching all labs from API...');
     const labs = await apiService.getAllLabs();
-    console.log('API returned labs:', labs);
-    
-    // Transform the API response to match the LabSession interface
-    return labs.map(lab => ({
-      id: lab.id,
-      name: lab.name,
-      status: lab.status,
-      startedAt: lab.started_at,
-      endsAt: lab.ends_at,
-      owner: lab.owner || { name: "Unknown", email: "unknown" },
-      credentials: lab.credentials.map(cred => ({
-        id: cred.id,
-        label: cred.label,
-        username: cred.username,
-        password: cred.password,
-        url: cred.url,
-        expiresAt: cred.expires_at,
-        notes: cred.notes
-      }))
-    }));
+    return convertLabResponses(labs);
   } catch (error) {
     console.error('Failed to fetch labs:', error);
     throw error; // Re-throw the error so the component can handle it
   }
 }
 
-function useAllCountdowns(labs: LabSession[]) {
-  const [currentTime, setCurrentTime] = useState(Date.now());
 
-  useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return labs.map(lab => {
-    if (!lab.endsAt) {
-      return { countdown: { mins: 0, secs: 0, pct: 0 }, progressValue: 0 };
-    }
-
-    const endTime = new Date(lab.endsAt).getTime();
-    const ms = Math.max(0, endTime - currentTime);
-    const mins = Math.floor(ms / 60000);
-    const secs = Math.floor((ms % 60000) / 1000);
-    
-    const totalMs = lab.startedAt && lab.endsAt ? Math.max(0, new Date(lab.endsAt).getTime() - new Date(lab.startedAt).getTime()) : 60 * 60 * 1000;
-    const pct = Math.min(100, Math.max(0, (ms / totalMs) * 100));
-    const progressValue = Math.min(100, Math.max(0, 100 - pct));
-
-    return { countdown: { mins, secs, pct }, progressValue };
-  });
-}
-
-const MaskedSecret: React.FC<{ secret: string }> = ({ secret }) => {
-  const [revealed, setRevealed] = useState(false);
-  return (
-    <div className="flex items-center gap-2">
-      <Input type={revealed ? "text" : "password"} value={secret} readOnly className="font-mono text-sm" />
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="secondary" size="icon" onClick={() => setRevealed((s) => !s)}>
-              {revealed ? <EyeOff className="h-4 w-4"/> : <Eye className="h-4 w-4"/>}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{revealed ? "Hide" : "Show"} secret</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                try {
-                  if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(secret);
-                } catch {}
-              }}
-            >
-              <Copy className="h-4 w-4"/>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Copy to clipboard</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  );
-};
 
 function AdminPageContent() {
   const [labs, setLabs] = useState<LabSession[]>([]);
@@ -132,8 +62,40 @@ function AdminPageContent() {
   const [serviceUsage, setServiceUsage] = useState<ServiceUsage[]>([]);
   const [serviceConfigs, setServiceConfigs] = useState<ServiceConfig[]>([]);
   const [serviceLimits, setServiceLimits] = useState<ServiceLimit[]>([]);
+  const [showStopDialog, setShowStopDialog] = useState(false);
+  const [selectedLab, setSelectedLab] = useState<LabSession | null>(null);
 
+  const handleStopLab = async () => {
+    if (!selectedLab) return;
 
+    try {
+      // Stop the lab first
+      await apiService.adminStopLab(selectedLab.id);
+      
+      // Then cleanup any remaining resources
+      try {
+        await apiService.cleanupLab(selectedLab.id);
+      } catch (cleanupError) {
+        console.warn('Cleanup failed (lab may already be cleaned up):', cleanupError);
+      }
+      
+      // Finally delete the lab record
+      try {
+        await apiService.adminDeleteLab(selectedLab.id);
+      } catch (deleteError) {
+        console.warn('Delete failed (lab may already be deleted):', deleteError);
+      }
+      
+      // Refresh the labs list
+      const data = await fetchAllLabSessions();
+      setLabs(data);
+      setShowStopDialog(false);
+      setSelectedLab(null);
+    } catch (error) {
+      console.error('Failed to stop lab:', error);
+      setError('Failed to stop lab');
+    }
+  };
 
   // Get countdown data for all labs using a single hook
   const labCountdowns = useAllCountdowns(labs);
@@ -452,61 +414,14 @@ function AdminPageContent() {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={async () => {
-                            if (confirm(`Are you sure you want to stop lab "${lab.name}"?`)) {
-                              try {
-                                await apiService.adminStopLab(lab.id);
-                                // Refresh the labs list
-                                const data = await fetchAllLabSessions();
-                                setLabs(data);
-                              } catch (error) {
-                                console.error('Failed to stop lab:', error);
-                                alert('Failed to stop lab');
-                              }
-                            }
+                          onClick={() => {
+                            setSelectedLab(lab);
+                            setShowStopDialog(true);
                           }}
                         >
                           Stop Lab
                         </Button>
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          if (confirm(`Are you sure you want to cleanup lab "${lab.name}"? This will remove all associated resources.`)) {
-                            try {
-                              await apiService.cleanupLab(lab.id);
-                              // Refresh the labs list
-                              const data = await fetchAllLabSessions();
-                              setLabs(data);
-                            } catch (error) {
-                                console.error('Failed to cleanup lab:', error);
-                                alert('Failed to cleanup lab');
-                              }
-                            }
-                          }}
-                        >
-                        Cleanup
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={async () => {
-                          if (confirm(`Are you sure you want to DELETE lab "${lab.name}"? This action cannot be undone.`)) {
-                            try {
-                              await apiService.adminDeleteLab(lab.id);
-                              // Refresh the labs list
-                              const data = await fetchAllLabSessions();
-                              setLabs(data);
-                            } catch (error) {
-                                console.error('Failed to delete lab:', error);
-                                alert('Failed to delete lab');
-                              }
-                            }
-                          }}
-                        >
-                        Delete
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -562,7 +477,11 @@ function AdminPageContent() {
                                 </div>
                               </TableCell>
                               <TableCell>
-                                <MaskedSecret secret={cred.password} />
+                                <PasswordToggleFieldWithCopy 
+                                  value={cred.password} 
+                                  placeholder="Password"
+                                  className="w-full max-w-xs"
+                                />
                               </TableCell>
                               <TableCell>
                                 {cred.url ? (
@@ -599,6 +518,27 @@ function AdminPageContent() {
           </CardContent>
         </Card>
       )}
+
+      {/* Stop Lab Confirmation Dialog */}
+      <AlertDialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop Lab</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to stop lab &quot;{selectedLab?.name}&quot;? This will delete all resources and cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleStopLab}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Stop Lab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </AppLayout>
   );

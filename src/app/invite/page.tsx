@@ -87,9 +87,6 @@ function InvitePageContent() {
         user_id: user.id,
       };
       
-      console.log('DEBUG: Accepting invite with request body:', requestBody);
-      console.log('DEBUG: Invite details:', invite);
-      console.log('DEBUG: User details:', user);
 
       const response = await fetch(`/api/invites/${invite.id}/accept`, {
         method: 'POST',
@@ -101,21 +98,17 @@ function InvitePageContent() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('DEBUG: Invite acceptance failed:', response.status, errorText);
         throw new Error(`Failed to accept invite: ${response.status} ${errorText}`);
       }
 
       const result = await response.json();
-      console.log('DEBUG: Invite acceptance successful:', result);
 
       setAccepted(true);
       
       // Refresh user data to get updated organization information
       try {
         await refreshUser();
-        console.log('DEBUG: User data refreshed after invite acceptance');
       } catch (error) {
-        console.error('DEBUG: Failed to refresh user data:', error);
         // Fallback to page reload if refresh fails
         setTimeout(() => {
           window.location.reload();

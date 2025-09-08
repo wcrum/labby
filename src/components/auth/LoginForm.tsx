@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Loader2, Mail } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
@@ -14,6 +22,7 @@ import { useTheme } from "@/lib/theme";
 export function LoginForm() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
   const { login, isLoading } = useAuth();
   const { resolvedTheme } = useTheme();
   const searchParams = useSearchParams();
@@ -32,6 +41,7 @@ export function LoginForm() {
       await login(email, inviteCode || undefined);
     } catch {
       setError("Login failed. Please try again.");
+      setShowErrorDialog(true);
     }
   };
 
@@ -78,11 +88,6 @@ export function LoginForm() {
               </div>
             </div>
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
 
             <Button 
               type="submit" 
@@ -106,6 +111,22 @@ export function LoginForm() {
           </div>
         </CardContent>
       </Card>
+
+      <AlertDialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Login Failed</AlertDialogTitle>
+            <AlertDialogDescription>
+              {error}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setShowErrorDialog(false)}>
+              Try Again
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
