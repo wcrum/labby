@@ -7,10 +7,10 @@ toolchain go1.24.4
 require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-openapi/strfmt v0.23.0
-	github.com/golang-jwt/jwt/v5 v5.0.0
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.4.0
-	github.com/rs/cors v1.9.0
+	github.com/rs/cors v1.11.0
 	github.com/sethvargo/go-password v0.3.1
 	github.com/spectrocloud/hapi v1.14.1-0.20250821040913-287790975451
 	github.com/spectrocloud/palette-sdk-go v0.0.0-20250813031623-91ef23e78e8f

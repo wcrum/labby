@@ -189,7 +189,7 @@ export function LabFailedView({ labId, lab, onCleanup }: LabFailedViewProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Cleanup</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cleanup failed lab "{lab.name}"? This will permanently delete all resources and cannot be undone.
+              Are you sure you want to cleanup failed lab &quot;{lab.name}&quot;? This will permanently delete all resources and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
