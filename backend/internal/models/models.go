@@ -17,12 +17,13 @@ const (
 
 // User represents a lab user
 type User struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Name      string    `json:"name"`
-	Role      UserRole  `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	Email          string    `json:"email"`
+	Name           string    `json:"name"`
+	Role           UserRole  `json:"role"`
+	OrganizationID *string   `json:"organization_id,omitempty"` // Optional organization membership
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // LabStatus represents the status of a lab
@@ -81,7 +82,8 @@ type CreateUserRequest struct {
 
 // LoginRequest represents a login request
 type LoginRequest struct {
-	Email string `json:"email" binding:"required,email"`
+	Email      string  `json:"email" binding:"required,email"`
+	InviteCode *string `json:"invite_code,omitempty"` // Optional invite code for organization assignment
 }
 
 // LoginResponse represents a login response
@@ -155,4 +157,15 @@ type ServiceUsage struct {
 	ServiceID  string `json:"service_id"`
 	ActiveLabs int    `json:"active_labs"`
 	Limit      int    `json:"limit"`
+}
+
+// UserWithOrganization represents a user with organization information
+type UserWithOrganization struct {
+	ID           string        `json:"id"`
+	Email        string        `json:"email"`
+	Name         string        `json:"name"`
+	Role         UserRole      `json:"role"`
+	Organization *Organization `json:"organization,omitempty"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
 }

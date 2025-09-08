@@ -6,8 +6,9 @@ import { apiService, User } from './api';
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string) => Promise<void>;
+  login: (email: string, inviteCode?: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
   isAdmin: boolean;
 }
 
@@ -41,10 +42,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (email: string) => {
+  const login = async (email: string, inviteCode?: string) => {
     try {
       setIsLoading(true);
-      const response = await apiService.login(email);
+      const response = await apiService.login(email, inviteCode);
       setUser(response.user);
     } catch (error) {
       console.error('Login failed:', error);
@@ -59,10 +60,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const userData = await apiService.getCurrentUser();
+      setUser(userData);
+    } catch (error) {
+      console.error('Failed to refresh user data:', error);
+      throw error;
+    }
+  };
+
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,12 +1,13 @@
 "use client";
 
+import { Suspense } from "react";
 import { useAuth } from "@/lib/auth";
 
 import { LabManager } from "@/components/lab/LabManager";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { AppLayout } from "@/components/layout/AppLayout";
 
-export default function Home() {
+function HomeContent() {
   const { user } = useAuth();
 
   if (!user) {
@@ -29,5 +30,13 @@ export default function Home() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 }

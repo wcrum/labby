@@ -55,6 +55,13 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 				"Creating User Account",
 				"Setting Password",
 			}
+		case "terraform_cloud":
+			steps = []string{
+				"Creating Workspace",
+				"Uploading Configuration",
+				"Setting Variables",
+				"Triggering Run",
+			}
 		default:
 			steps = []string{"Initializing"}
 		}

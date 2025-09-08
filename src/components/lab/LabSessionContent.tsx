@@ -56,44 +56,8 @@ function convertLabResponse(labResponse: LabResponse): LabSession {
 }
 
 async function fetchLabSession(labId: string): Promise<LabSession> {
-  try {
-    const labResponse = await apiService.getLab(labId);
-    return convertLabResponse(labResponse);
-  } catch (error) {
-    console.error("Failed to fetch lab:", error);
-    // Fallback to mock data for development
-    await new Promise((r) => setTimeout(r, 600));
-    const now = new Date();
-    const in45 = new Date(now.getTime() + 45 * 60 * 1000);
-    return {
-      id: labId,
-      name: "Spectro Cloud Hands-on Lab",
-      status: "ready",
-      startedAt: now.toISOString(),
-      endsAt: in45.toISOString(),
-      owner: { name: "William Crum", email: "will.crum@spectrocloud.com" },
-      credentials: [
-        {
-          id: "vertex",
-          label: "VerteX",
-          username: "lab-user",
-          password: "vX-8a3H-Temp!",
-          url: "https://vertex.example.lab/login",
-          expiresAt: in45.toISOString(),
-          notes: "Use for Spectro Cloud control plane access.",
-        },
-        {
-          id: "proxmox",
-          label: "Proxmox",
-          username: "root@pam",
-          password: "Pmx-Temp-4Y2#",
-          url: "https://proxmox.example.lab:8006",
-          expiresAt: in45.toISOString(),
-          notes: "Proxmox VE UI for cluster management.",
-        },
-      ],
-    };
-  }
+  const labResponse = await apiService.getLab(labId);
+  return convertLabResponse(labResponse);
 }
 
 
@@ -153,7 +117,7 @@ const MaskedSecret: React.FC<{ secret: string }> = ({ secret }) => {
   );
 };
 
-export function LabSessionContent({ labId = "demo-lab-1" }: { labId?: string }) {
+export function LabSessionContent({ labId }: { labId: string }) {
   const [lab, setLab] = useState<LabSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [stopping, setStopping] = useState(false);

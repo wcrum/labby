@@ -9,6 +9,17 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  organization_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserWithOrganization {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  organization?: Organization;
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +61,7 @@ export interface LabResponse {
 
 export interface LoginRequest {
   email: string;
+  invite_code?: string;
 }
 
 export interface LoginResponse {
@@ -106,6 +118,27 @@ export interface ServiceUsage {
   service_id: string;
   active_labs: number;
   limit: number;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  description: string;
+  domain: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Invite {
+  id: string;
+  organization_id: string;
+  email: string;
+  invited_by: string;
+  role: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  accepted_at?: string;
 }
 
 class ApiService {
@@ -169,10 +202,15 @@ class ApiService {
   }
 
   // Authentication
-  async login(email: string): Promise<LoginResponse> {
+  async login(email: string, inviteCode?: string): Promise<LoginResponse> {
+    const requestBody: LoginRequest = { email };
+    if (inviteCode) {
+      requestBody.invite_code = inviteCode;
+    }
+    
     const response = await this.request<LoginResponse>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify(requestBody),
     });
     
     this.setToken(response.token);
@@ -280,6 +318,13 @@ class ApiService {
     });
   }
 
+  async cleanupTerraformCloud(labId: string): Promise<void> {
+    await this.request(`/api/admin/terraform-cloud/cleanup`, {
+      method: 'POST',
+      body: JSON.stringify({ lab_id: labId }),
+    });
+  }
+
 
 
   // Admin endpoints
@@ -287,9 +332,6 @@ class ApiService {
     return this.request<LabResponse[]>('/api/admin/labs');
   }
 
-  async getAllUsers(): Promise<User[]> {
-    return this.request<User[]>('/api/admin/users');
-  }
 
   async createUser(data: { email: string; name: string; role: UserRole }): Promise<User> {
     return this.request<User>('/api/admin/users', {
@@ -372,6 +414,42 @@ class ApiService {
   // Health check
   async healthCheck(): Promise<{ status: string; message: string }> {
     return this.request<{ status: string; message: string }>('/health');
+  }
+
+  // Organization management
+  async getOrganizations(): Promise<Organization[]> {
+    return this.request<Organization[]>('/api/admin/organizations');
+  }
+
+  async createOrganization(data: { name: string; description?: string; domain?: string }): Promise<Organization> {
+    return this.request<Organization>('/api/admin/organizations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async createInvite(organizationId: string, data: { email: string; role: string }): Promise<Invite> {
+    return this.request<Invite>(`/api/admin/organizations/${organizationId}/invites`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Get user's organization
+  async getUserOrganization(): Promise<Organization | null> {
+    try {
+      return await this.request<Organization>('/api/user/organization');
+    } catch (error) {
+      // If user has no organization (404), return null
+      // Other errors should be logged but still return null
+      console.log('DEBUG: getUserOrganization error:', error);
+      return null;
+    }
+  }
+
+  // Get all users (admin only)
+  async getAllUsers(): Promise<UserWithOrganization[]> {
+    return this.request<UserWithOrganization[]>('/api/admin/users');
   }
 }
 

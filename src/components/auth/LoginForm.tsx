@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,8 @@ export function LoginForm() {
   const [error, setError] = useState("");
   const { login, isLoading } = useAuth();
   const { resolvedTheme } = useTheme();
+  const searchParams = useSearchParams();
+  const inviteCode = searchParams.get('code');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +29,7 @@ export function LoginForm() {
     }
 
     try {
-      await login(email);
+      await login(email, inviteCode || undefined);
     } catch {
       setError("Login failed. Please try again.");
     }
@@ -49,7 +52,11 @@ export function LoginForm() {
           <div className="space-y-2">
             <CardTitle className="text-2xl font-bold">Welcome to Spectro Lab</CardTitle>
             <CardDescription>
-              Enter your email to access your lab sessions
+              {inviteCode ? (
+                <>You&apos;ve been invited to join an organization. Enter your email to get started.</>
+              ) : (
+                <>Enter your email to access your lab sessions</>
+              )}
             </CardDescription>
           </div>
         </CardHeader>
@@ -95,9 +102,7 @@ export function LoginForm() {
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
             <p>No password required - just enter your email to get started</p>
-            <p className="mt-2">
-              <strong>Admin:</strong> admin@spectrocloud.com
-            </p>
+
           </div>
         </CardContent>
       </Card>

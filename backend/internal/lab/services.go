@@ -267,19 +267,8 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 
 // provisionTerraformCloudService provisions a Terraform Cloud service
 func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *models.ServiceConfig) {
-	// Set environment variables from service config
-	if host, ok := serviceConfig.Config["host"]; ok {
-		os.Setenv("TF_CLOUD_HOST", host)
-	}
-	if apiToken, ok := serviceConfig.Config["api_token"]; ok {
-		os.Setenv("TF_CLOUD_API_TOKEN", apiToken)
-	}
-	if organization, ok := serviceConfig.Config["organization"]; ok {
-		os.Setenv("TF_CLOUD_ORGANIZATION", organization)
-	}
-
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", os.Getenv("TF_CLOUD_HOST")))
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", os.Getenv("TF_CLOUD_ORGANIZATION")))
+	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", serviceConfig.Config["host"]))
+	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", serviceConfig.Config["organization"]))
 
 	// Get lab for context
 	s.mu.Lock()

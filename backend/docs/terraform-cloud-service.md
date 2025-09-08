@@ -77,7 +77,7 @@ services:
 
 2. **Start a Lab** using the template. The service will:
    - Create a new workspace named `lab-{shortID}`
-   - Upload a default Terraform configuration (AWS EC2 instance)
+   - Upload the specified Terraform configuration from the source directory
    - Trigger a Terraform run
    - Provide credentials with workspace access
 
@@ -157,19 +157,16 @@ customConfig := map[string]string{
     "main.tf": `
 terraform {
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.4"
     }
   }
 }
 
-resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-  
-  tags = {
-    Name = "Lab VPC"
-  }
+resource "local_file" "example" {
+  content  = "This is a custom lab configuration"
+  filename = "custom-lab.txt"
 }
 `,
     "variables.tf": `
@@ -200,12 +197,9 @@ The service uses Terraform Cloud's REST API v2:
 - **Trigger Run**: `POST /api/v2/runs`
 - **Get Run Status**: `GET /api/v2/runs/{id}`
 
-## Default Configuration
+## Configuration Requirements
 
-The service includes a default Terraform configuration that creates:
-- AWS EC2 instance (t2.micro)
-- Basic networking
-- Outputs for instance ID and public IP
+The service requires a `source_directory` to be specified in the service configuration. This directory should contain the Terraform configuration files (`.tf` files) that will be uploaded to the Terraform Cloud workspace.
 
 ## Credentials
 
@@ -290,32 +284,35 @@ resource "proxmox_vm_qemu" "lab_vm" {
 }
 ```
 
-### Multi-Cloud Configuration
+### Multi-Provider Configuration
 
-For a multi-cloud lab:
+For a multi-provider lab:
 
 ```hcl
 terraform {
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.4"
     }
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
     }
   }
 }
 
-# AWS Resources
-provider "aws" {
-  region = "us-west-2"
+# Local file resource
+resource "local_file" "config" {
+  content  = "Lab configuration"
+  filename = "config.txt"
 }
 
-resource "aws_instance" "aws_vm" {
-  ami           = "ami-0c55b159cbfafe1f0"
-  instance_type = "t2.micro"
+# Random string resource
+resource "random_string" "suffix" {
+  length  = 8
+  special = false
+  upper   = false
 }
 
 # Azure Resources

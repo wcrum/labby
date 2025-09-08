@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/wcrum/labby/internal/models"
+	"github.com/wcrum/labby/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -26,7 +28,23 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authService.Login(req.Email)
+	fmt.Printf("DEBUG: Login request for email: %s, invite_code: %v\n", req.Email, req.InviteCode)
+
+	// If invite code is provided, get the organization from the invite
+	var organizationID *string
+	if req.InviteCode != nil && *req.InviteCode != "" {
+		orgService := services.NewOrganizationService()
+		invite, err := orgService.GetInvite(*req.InviteCode)
+		if err != nil {
+			fmt.Printf("DEBUG: Failed to get invite %s: %v\n", *req.InviteCode, err)
+			// Continue with login even if invite is invalid
+		} else {
+			organizationID = &invite.OrganizationID
+			fmt.Printf("DEBUG: Found invite organization: %s\n", invite.OrganizationID)
+		}
+	}
+
+	user, err := h.authService.LoginWithOrganization(req.Email, organizationID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Login failed"})
 		return
@@ -61,5 +79,23 @@ func (h *Handler) GetCurrentUser(c *gin.Context) {
 	}
 
 	userObj := user.(*models.User)
+
+	// If user has no organization, assign them to the default organization
+	// This handles users who access the system directly (not through invites)
+	if userObj.OrganizationID == nil {
+		err := h.authService.AssignUserToDefaultOrganization(userObj.ID)
+		if err != nil {
+			fmt.Printf("Warning: Failed to assign user to default organization: %v\n", err)
+		} else {
+			// Update the user object in context
+			userObj.OrganizationID = stringPtr("org-default")
+		}
+	}
+
 	c.JSON(http.StatusOK, userObj)
+}
+
+// Helper function to create string pointer
+func stringPtr(s string) *string {
+	return &s
 }

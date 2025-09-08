@@ -80,7 +80,7 @@ func main() {
 
 	handler := handlers.NewHandler(authService, labService)
 
-	// Create a default admin user for testing
+	// Create a default admin user
 	adminUser, err := authService.CreateAdminUser("admin@spectrocloud.com", "Admin User")
 	if err != nil {
 		log.Printf("Failed to create admin user: %v", err)
@@ -150,12 +150,19 @@ func main() {
 	// Public routes
 	router.POST("/api/auth/login", handler.Login)
 
+	// Public invite routes
+	router.GET("/api/invites/:id", handler.GetInvite)
+	router.POST("/api/invites/:id/accept", handler.AcceptInvite)
+
 	// Protected routes
 	protected := router.Group("/api")
 	protected.Use(handler.AuthMiddleware())
 	{
 		// Auth routes
 		protected.GET("/auth/me", handler.GetCurrentUser)
+
+		// User routes
+		protected.GET("/user/organization", handler.GetUserOrganization)
 
 		// Lab routes
 		protected.POST("/labs", handler.CreateLab)
@@ -181,10 +188,17 @@ func main() {
 		admin.DELETE("/labs/:id", handler.AdminDeleteLab)
 		admin.POST("/labs/:id/cleanup", handler.CleanupLab)
 		admin.POST("/palette-project/cleanup", handler.AdminCleanupPaletteProject)
+		admin.POST("/terraform-cloud/cleanup", handler.AdminCleanupTerraformCloud)
 		admin.GET("/users", handler.GetUsers)
 		admin.POST("/users", handler.CreateUser)
 		admin.PUT("/users/:id/role", handler.UpdateUserRole)
 		admin.DELETE("/users/:id", handler.DeleteUser)
+
+		// Organization management
+		admin.GET("/organizations", handler.GetOrganizations)
+		admin.POST("/organizations", handler.CreateOrganization)
+		admin.GET("/organizations/:id", handler.GetOrganization)
+		admin.POST("/organizations/:id/invites", handler.CreateInvite)
 
 		// Service configuration and limit management
 		admin.GET("/service-configs", handler.GetServiceConfigs)

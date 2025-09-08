@@ -38,7 +38,6 @@ func NewServiceManager() *ServiceManager {
 	serviceConfigMap["proxmox-user-1"] = proxmoxUserService
 	serviceConfigMap["palette-tenant-1"] = paletteTenantService
 	serviceConfigMap["terraform-cloud-1"] = terraformCloudService
-	serviceConfigMap["terraform-cloud-aws-1"] = terraformCloudService
 	serviceConfigMap["terraform-cloud-example-1"] = terraformCloudService
 
 	return &ServiceManager{

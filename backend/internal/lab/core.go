@@ -234,7 +234,7 @@ func (s *Service) ConvertLabToResponse(lab *models.Lab, authService interface{})
 			// If user lookup fails, create a fallback user
 			owner = models.User{
 				ID:    lab.OwnerID,
-				Email: "unknown@example.com",
+				Email: "unknown",
 				Name:  "Unknown User",
 			}
 		}
@@ -242,7 +242,7 @@ func (s *Service) ConvertLabToResponse(lab *models.Lab, authService interface{})
 		// If auth service doesn't have GetUserByID, create a fallback user
 		owner = models.User{
 			ID:    lab.OwnerID,
-			Email: "unknown@example.com",
+			Email: "unknown",
 			Name:  "Unknown User",
 		}
 	}

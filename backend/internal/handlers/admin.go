@@ -89,18 +89,44 @@ func (h *Handler) LoadTemplates(c *gin.Context) {
 
 // GetUsers handles getting all users (admin only)
 // @Summary Get all users (admin)
-// @Description Get all users in the system (admin only)
+// @Description Get all users in the system with organization information (admin only)
 // @Tags admin
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {array} models.User
+// @Success 200 {array} models.UserWithOrganization
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /admin/users [get]
 func (h *Handler) GetUsers(c *gin.Context) {
 	users := h.authService.GetAllUsers()
-	c.JSON(http.StatusOK, users)
+
+	// Convert users to UserWithOrganization format
+	usersWithOrg := make([]*models.UserWithOrganization, len(users))
+	orgService := services.NewOrganizationService()
+
+	for i, user := range users {
+		userWithOrg := &models.UserWithOrganization{
+			ID:        user.ID,
+			Email:     user.Email,
+			Name:      user.Name,
+			Role:      user.Role,
+			CreatedAt: user.CreatedAt,
+			UpdatedAt: user.UpdatedAt,
+		}
+
+		// If user has an organization, fetch organization details
+		if user.OrganizationID != nil {
+			org, err := orgService.GetOrganization(*user.OrganizationID)
+			if err == nil {
+				userWithOrg.Organization = org
+			}
+		}
+
+		usersWithOrg[i] = userWithOrg
+	}
+
+	c.JSON(http.StatusOK, usersWithOrg)
 }
 
 // CreateUser handles creating a new user (admin only)
@@ -283,6 +309,70 @@ func (h *Handler) AdminCleanupPaletteProject(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Palette Project cleanup completed successfully"})
+}
+
+// AdminCleanupTerraformCloud handles cleaning up Terraform Cloud resources by lab ID (admin only)
+// @Summary Cleanup Terraform Cloud resources by lab ID (admin)
+// @Description Clean up all Terraform Cloud resources (workspaces, runs, etc.) associated with a lab ID (admin only)
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body map[string]string true "Terraform Cloud cleanup request"
+// @Success 200 {object} map[string]interface{} "Cleanup successful"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/terraform-cloud/cleanup [post]
+func (h *Handler) AdminCleanupTerraformCloud(c *gin.Context) {
+	var req map[string]string
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	labID, exists := req["lab_id"]
+	if !exists || labID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	// Execute Terraform Cloud cleanup directly
+	serviceManager := services.NewServiceManager()
+	terraformCloudService, exists := serviceManager.GetRegistry().GetService("terraform_cloud")
+
+	if !exists {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Terraform Cloud service not available"})
+		return
+	}
+
+	// Get the service configuration to properly configure the service
+	serviceConfigManager := h.labService.GetServiceConfigManager()
+	terraformConfig, exists := serviceConfigManager.GetServiceConfig("terraform-cloud-1")
+	if !exists || terraformConfig == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Terraform Cloud service configuration not found"})
+		return
+	}
+
+	// Configure the service with the service configuration
+	terraformCloudService.(*services.TerraformCloudService).ConfigureFromServiceConfig(terraformConfig.Config, labID)
+
+	// Create cleanup context with the lab ID
+	cleanupCtx := &interfaces.CleanupContext{
+		LabID:   labID,
+		Context: c.Request.Context(),
+		Lab:     nil, // No lab instance for admin cleanup
+	}
+
+	// Execute cleanup
+	err := terraformCloudService.ExecuteCleanup(cleanupCtx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup Terraform Cloud resources: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Terraform Cloud cleanup completed successfully"})
 }
 
 // GetServiceConfigs returns all service configurations

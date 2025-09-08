@@ -43,9 +43,9 @@ var (
 // NewTerraformCloudService creates a new Terraform Cloud service instance
 func NewTerraformCloudService() *TerraformCloudService {
 	return &TerraformCloudService{
-		host:          os.Getenv("TF_CLOUD_HOST"),
-		apiToken:      os.Getenv("TF_CLOUD_API_TOKEN"),
-		organization:  os.Getenv("TF_CLOUD_ORGANIZATION"),
+		host:          "",
+		apiToken:      "",
+		organization:  "",
 		variables:     make(map[string]string),
 		sensitiveVars: make(map[string]string),
 	}
@@ -425,9 +425,49 @@ func (v *TerraformCloudService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 		}
 	}
 
+	// If no workspace ID found in lab data, try to find it by workspace name
 	if workspaceID == "" {
-		fmt.Printf("Warning: No workspace ID found for lab %s\n", ctx.LabID)
+		workspaceName := fmt.Sprintf("lab-%s", ctx.LabID)
+		fmt.Printf("No workspace ID found, searching for workspace by name: %s\n", workspaceName)
+
+		// Search for workspace by name
+		foundWorkspaceID, err := v.findWorkspaceByName(workspaceName)
+		if err != nil {
+			fmt.Printf("Warning: Failed to find workspace by name %s: %v\n", workspaceName, err)
+		} else if foundWorkspaceID != "" {
+			workspaceID = foundWorkspaceID
+			fmt.Printf("Found workspace by name: %s (ID: %s)\n", workspaceName, workspaceID)
+		}
+	}
+
+	// Additional safety check: verify the workspace still exists before cleanup
+	if workspaceID != "" {
+		exists, err := v.workspaceExists(workspaceID)
+		if err != nil {
+			fmt.Printf("Warning: Failed to verify workspace existence: %v\n", err)
+		} else if !exists {
+			fmt.Printf("Workspace %s no longer exists, skipping cleanup\n", workspaceID)
+			return nil
+		}
+	}
+
+	if workspaceID == "" {
+		fmt.Printf("Warning: No workspace found for lab %s\n", ctx.LabID)
 		return nil
+	}
+
+	// Clean up any runs associated with the workspace
+	fmt.Printf("Cleaning up runs for workspace %s...\n", workspaceID)
+	if err := v.cleanupWorkspaceRuns(workspaceID); err != nil {
+		fmt.Printf("Warning: Failed to cleanup runs for workspace %s: %v\n", workspaceID, err)
+		// Continue with workspace deletion even if run cleanup fails
+	}
+
+	// Clean up any variables associated with the workspace
+	fmt.Printf("Cleaning up variables for workspace %s...\n", workspaceID)
+	if err := v.cleanupWorkspaceVariables(workspaceID); err != nil {
+		fmt.Printf("Warning: Failed to cleanup variables for workspace %s: %v\n", workspaceID, err)
+		// Continue with workspace deletion even if variable cleanup fails
 	}
 
 	// Delete workspace
@@ -520,12 +560,14 @@ func (v *TerraformCloudService) createWorkspace(ctx *interfaces.SetupContext, sh
 	return workspaceID, nil
 }
 
-// deleteWorkspace deletes a Terraform Cloud workspace
-func (v *TerraformCloudService) deleteWorkspace(workspaceID string) error {
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.host, workspaceID)
-	req, err := http.NewRequest("DELETE", url, nil)
+// findWorkspaceByName searches for a Terraform Cloud workspace by name
+func (v *TerraformCloudService) findWorkspaceByName(workspaceName string) (string, error) {
+	fmt.Printf("Searching for Terraform Cloud workspace: %s\n", workspaceName)
+
+	url := fmt.Sprintf("%s/api/v2/organizations/%s/workspaces?search[name]=%s", v.host, v.organization, workspaceName)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create delete request: %v", err)
+		return "", fmt.Errorf("failed to create search request: %v", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+v.apiToken)
@@ -533,16 +575,335 @@ func (v *TerraformCloudService) deleteWorkspace(workspaceID string) error {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to make delete request: %v", err)
+		return "", fmt.Errorf("failed to search workspace: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to search workspace: %s - %s", resp.Status, string(body))
+	}
+
+	// Parse response to find workspace
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	data, ok := response["data"].([]interface{})
+	if !ok {
+		return "", fmt.Errorf("invalid response format")
+	}
+
+	// Look for exact name match
+	for _, item := range data {
+		workspace, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		attributes, ok := workspace["attributes"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		name, ok := attributes["name"].(string)
+		if !ok {
+			continue
+		}
+
+		if name == workspaceName {
+			workspaceID, ok := workspace["id"].(string)
+			if ok {
+				return workspaceID, nil
+			}
+		}
+	}
+
+	return "", nil // Workspace not found
+}
+
+// cleanupWorkspaceRuns cleans up all runs associated with a workspace
+func (v *TerraformCloudService) cleanupWorkspaceRuns(workspaceID string) error {
+	fmt.Printf("Cleaning up runs for workspace %s...\n", workspaceID)
+
+	// Get all runs for the workspace
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/runs", v.host, workspaceID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create runs request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to get runs: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get runs: %s - %s", resp.Status, string(body))
+	}
+
+	// Parse response to get runs
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	data, ok := response["data"].([]interface{})
+	if !ok {
+		return fmt.Errorf("invalid response format")
+	}
+
+	// Cancel any running runs and clean up completed ones
+	for _, item := range data {
+		run, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		runID, ok := run["id"].(string)
+		if !ok {
+			continue
+		}
+
+		attributes, ok := run["attributes"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		status, ok := attributes["status"].(string)
+		if !ok {
+			continue
+		}
+
+		// Cancel running runs
+		if status == "running" || status == "pending" {
+			fmt.Printf("Cancelling run %s (status: %s)...\n", runID, status)
+			if err := v.cancelRun(runID); err != nil {
+				fmt.Printf("Warning: Failed to cancel run %s: %v\n", runID, err)
+			}
+		}
+	}
+
+	fmt.Printf("Run cleanup completed for workspace %s\n", workspaceID)
+	return nil
+}
+
+// cancelRun cancels a Terraform Cloud run
+func (v *TerraformCloudService) cancelRun(runID string) error {
+	url := fmt.Sprintf("%s/api/v2/runs/%s/actions/cancel", v.host, runID)
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create cancel request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to cancel run: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to cancel run: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// cleanupWorkspaceVariables cleans up all variables associated with a workspace
+func (v *TerraformCloudService) cleanupWorkspaceVariables(workspaceID string) error {
+	fmt.Printf("Cleaning up variables for workspace %s...\n", workspaceID)
+
+	// Get all variables for the workspace
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars", v.host, workspaceID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create variables request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to get variables: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get variables: %s - %s", resp.Status, string(body))
+	}
+
+	// Parse response to get variables
+	var response map[string]interface{}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	data, ok := response["data"].([]interface{})
+	if !ok {
+		return fmt.Errorf("invalid response format")
+	}
+
+	// Delete all variables
+	for _, item := range data {
+		variable, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		variableID, ok := variable["id"].(string)
+		if !ok {
+			continue
+		}
+
+		fmt.Printf("Deleting variable %s...\n", variableID)
+		if err := v.deleteVariable(workspaceID, variableID); err != nil {
+			fmt.Printf("Warning: Failed to delete variable %s: %v\n", variableID, err)
+		}
+	}
+
+	fmt.Printf("Variable cleanup completed for workspace %s\n", workspaceID)
+	return nil
+}
+
+// deleteVariable deletes a Terraform Cloud variable
+func (v *TerraformCloudService) deleteVariable(workspaceID, variableID string) error {
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars/%s", v.host, workspaceID, variableID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete variable request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete variable: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete workspace: %s - %s", resp.Status, string(body))
+		return fmt.Errorf("failed to delete variable: %s - %s", resp.Status, string(body))
 	}
 
-	fmt.Printf("Deleted Terraform Cloud workspace: %s\n", workspaceID)
+	return nil
+}
+
+// workspaceExists checks if a workspace exists by making a GET request to the workspace endpoint
+func (v *TerraformCloudService) workspaceExists(workspaceID string) (bool, error) {
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.host, workspaceID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create workspace check request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to check workspace existence: %v", err)
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK, nil
+}
+
+// deleteWorkspace deletes a Terraform Cloud workspace using safe deletion first, then force deletion if needed
+func (v *TerraformCloudService) deleteWorkspace(workspaceID string) error {
+	fmt.Printf("Attempting safe deletion of Terraform Cloud workspace: %s\n", workspaceID)
+
+	// First, try safe deletion as recommended by Terraform Cloud API
+	if err := v.safeDeleteWorkspace(workspaceID); err == nil {
+		fmt.Printf("Successfully deleted workspace %s using safe deletion\n", workspaceID)
+		return nil
+	}
+
+	fmt.Printf("Safe deletion failed, attempting force deletion of workspace: %s\n", workspaceID)
+
+	// If safe deletion fails, fall back to force deletion
+	if err := v.forceDeleteWorkspace(workspaceID); err != nil {
+		return fmt.Errorf("both safe and force deletion failed: %v", err)
+	}
+
+	fmt.Printf("Successfully deleted workspace %s using force deletion\n", workspaceID)
+	return nil
+}
+
+// safeDeleteWorkspace attempts to safely delete a workspace using the safe-delete endpoint
+func (v *TerraformCloudService) safeDeleteWorkspace(workspaceID string) error {
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/actions/safe-delete", v.host, workspaceID)
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create safe delete request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Content-Type", "application/vnd.api+json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute safe delete request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("safe delete failed: %s - %s", resp.Status, string(body))
+	}
+
+	return nil
+}
+
+// forceDeleteWorkspace forces deletion of a workspace using the DELETE endpoint
+func (v *TerraformCloudService) forceDeleteWorkspace(workspaceID string) error {
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.host, workspaceID)
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create force delete request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to execute force delete request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("force delete failed: %s - %s", resp.Status, string(body))
+	}
+
 	return nil
 }
 
@@ -1034,8 +1395,7 @@ func (v *TerraformCloudService) UploadCustomConfiguration(workspaceID string, co
 // LoadTerraformConfiguration loads Terraform configuration from the spacewalk directory
 func (v *TerraformCloudService) LoadTerraformConfiguration(ctx *interfaces.SetupContext) (map[string]string, error) {
 	if v.sourceDirectory == "" {
-		// Fallback to default configuration
-		return v.GetDefaultConfiguration(ctx.LabName), nil
+		return nil, fmt.Errorf("no source directory specified for Terraform configuration. Please configure a source_directory in the service configuration")
 	}
 
 	// Construct the full path to the Terraform configuration
@@ -1191,61 +1551,4 @@ func (v *TerraformCloudService) setWorkspaceVariable(workspaceID, key, value str
 	}
 
 	return nil
-}
-
-// GetDefaultConfiguration returns a default Terraform configuration for labs
-func (v *TerraformCloudService) GetDefaultConfiguration(labName string) map[string]string {
-	return map[string]string{
-		"main.tf": `terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = "us-west-2"
-}
-
-resource "aws_instance" "example" {
-  ami           = "ami-0c55b159cbfafe1f0"
-  instance_type = "t2.micro"
-
-  tags = {
-    Name = "Lab Instance"
-    Lab  = "` + labName + `"
-  }
-}
-
-output "instance_id" {
-  value = aws_instance.example.id
-}
-
-output "public_ip" {
-  value = aws_instance.example.public_ip
-}`,
-		"variables.tf": `variable "instance_type" {
-  description = "EC2 instance type"
-  type        = string
-  default     = "t2.micro"
-}
-
-variable "region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-west-2"
-}`,
-		"outputs.tf": `output "instance_id" {
-  description = "ID of the EC2 instance"
-  value       = aws_instance.example.id
-}
-
-output "public_ip" {
-  description = "Public IP address of the EC2 instance"
-  value       = aws_instance.example.public_ip
-}`,
-	}
 }

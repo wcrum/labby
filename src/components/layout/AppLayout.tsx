@@ -1,12 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
+import { apiService, Organization } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Shield, User, LogOut, Settings, Users, FlaskConical } from "lucide-react";
+import { Shield, User, LogOut, Settings, Users, FlaskConical, Trash2, Building2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useTheme } from "@/lib/theme";
 
@@ -18,6 +19,30 @@ interface AppLayoutProps {
 export function AppLayout({ children, showNav = true }: AppLayoutProps) {
   const { user, logout, isAdmin } = useAuth();
   const { resolvedTheme } = useTheme();
+  const [userOrganization, setUserOrganization] = useState<Organization | null>(null);
+  const [loadingOrg, setLoadingOrg] = useState(false);
+
+  // Fetch user's organization when user changes
+  useEffect(() => {
+    if (user) {
+      console.log('DEBUG: Fetching organization for user:', user);
+      setLoadingOrg(true);
+      apiService.getUserOrganization()
+        .then(org => {
+          console.log('DEBUG: Organization fetched successfully:', org);
+          setUserOrganization(org);
+        })
+        .catch(error => {
+          console.log('DEBUG: Failed to fetch user organization:', error);
+          setUserOrganization(null);
+        })
+        .finally(() => {
+          setLoadingOrg(false);
+        });
+    } else {
+      setUserOrganization(null);
+    }
+  }, [user]);
 
   if (!user) {
     return <>{children}</>;
@@ -62,12 +87,42 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                   </Button>
                   
                   {isAdmin && (
-                    <Button variant="ghost" asChild>
-                      <Link href="/admin" className="flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
-                        Admin Dashboard
-                      </Link>
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          Admin Tools
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        <DropdownMenuLabel>Administration</DropdownMenuLabel>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin" className="flex items-center gap-2">
+                            <Shield className="h-4 w-4" />
+                            Dashboard
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/organizations" className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4" />
+                            Organizations
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/users" className="flex items-center gap-2">
+                            <Users className="h-4 w-4" />
+                            Users
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href="/admin/cleanup" className="flex items-center gap-2">
+                            <Trash2 className="h-4 w-4" />
+                            Cleanup Tools
+                          </Link>
+                        </DropdownMenuItem>
+
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                   
                   <Button variant="ghost" asChild>
@@ -98,13 +153,31 @@ export function AppLayout({ children, showNav = true }: AppLayoutProps) {
                       <User className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuContent align="end" className="w-64">
                     <DropdownMenuLabel>
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">{user.name}</p>
                         <p className="text-xs leading-none text-muted-foreground">
                           {user.email}
                         </p>
+                        {userOrganization && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <Building2 className="h-3 w-3 text-muted-foreground" />
+                            <p className="text-xs leading-none text-muted-foreground">
+                              {userOrganization.name}
+                            </p>
+                          </div>
+                        )}
+                        {loadingOrg && (
+                          <p className="text-xs leading-none text-muted-foreground">
+                            Loading organization...
+                          </p>
+                        )}
+                        {!loadingOrg && !userOrganization && user && (
+                          <p className="text-xs leading-none text-muted-foreground">
+                            No organization
+                          </p>
+                        )}
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />

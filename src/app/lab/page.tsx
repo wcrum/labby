@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
@@ -46,7 +46,7 @@ function convertLabResponse(labResponse: LabResponse): LabSession {
     status: labResponse.status,
     startedAt: labResponse.started_at,
     endsAt: labResponse.ends_at,
-    owner: labResponse.owner || { name: "Unknown", email: "unknown@example.com" },
+    owner: labResponse.owner || { name: "Unknown", email: "unknown" },
     credentials: labResponse.credentials.map(cred => ({
       id: cred.id,
       label: cred.label,
@@ -60,52 +60,8 @@ function convertLabResponse(labResponse: LabResponse): LabSession {
 }
 
 async function fetchLabSession(labId: string): Promise<LabSession> {
-  try {
-    const labResponse = await apiService.getLab(labId);
-    return convertLabResponse(labResponse);
-  } catch (error) {
-    console.error("Failed to fetch lab:", error);
-    
-    // Check if it's a "Lab not found" error
-    if (error instanceof Error && error.message.includes("Lab not found")) {
-      // Return a proper error state instead of mock data
-      throw new Error(`Lab with ID "${labId}" not found. Please check the lab ID or create a new lab.`);
-    }
-    
-    // For other errors, fallback to mock data for development
-    console.warn("Using fallback mock data due to API error");
-    await new Promise((r) => setTimeout(r, 600));
-    const now = new Date();
-    const in45 = new Date(now.getTime() + 45 * 60 * 1000);
-    return {
-      id: labId,
-      name: "Spectro Cloud Hands-on Lab",
-      status: "ready",
-      startedAt: now.toISOString(),
-      endsAt: in45.toISOString(),
-      owner: { name: "William Crum", email: "will.crum@spectrocloud.com" },
-      credentials: [
-        {
-          id: "vertex",
-          label: "VerteX",
-          username: "lab-user",
-          password: "vX-8a3H-Temp!",
-          url: "https://vertex.example.lab/login",
-          expiresAt: in45.toISOString(),
-          notes: "Use for Spectro Cloud control plane access.",
-        },
-        {
-          id: "proxmox",
-          label: "Proxmox",
-          username: "root@pam",
-          password: "Pmx-Temp-4Y2#",
-          url: "https://proxmox.example.lab:8006",
-          expiresAt: in45.toISOString(),
-          notes: "Proxmox VE UI for cluster management.",
-        },
-      ],
-    };
-  }
+  const labResponse = await apiService.getLab(labId);
+  return convertLabResponse(labResponse);
 }
 
 
@@ -166,7 +122,7 @@ const MaskedSecret: React.FC<{ secret: string }> = ({ secret }) => {
 };
 
 function LabSessionPageContent() {
-  const [labId, setLabId] = useState<string>("demo-lab-1");
+  const [labId, setLabId] = useState<string>("");
 
   // Read labId from URL parameters on client side
   useEffect(() => {
@@ -181,6 +137,7 @@ function LabSessionPageContent() {
   const [lab, setLab] = useState<LabSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   const getBadgeVariant = (status: LabSession['status']) => {
     switch (status) {
@@ -190,7 +147,6 @@ function LabSessionPageContent() {
       case 'starting':
         return 'secondary';
       case 'error':
-      case 'expired':
         return 'destructive';
       default:
         return 'secondary';
@@ -242,6 +198,26 @@ function LabSessionPageContent() {
     fetchLabSession(labId).then(setLab).catch(err => {
       setError(err instanceof Error ? err.message : "Failed to load lab");
     });
+  };
+
+  const handleStopLab = async () => {
+    if (!lab || !confirm("Are you sure you want to stop this lab? This will delete all resources and cannot be undone.")) {
+      return;
+    }
+
+    setStopping(true);
+    try {
+      // Stop the lab (which will also delete and cleanup resources)
+      await apiService.stopLab(lab.id);
+      
+      // Redirect to labs page after successful stop
+      window.location.href = '/labs';
+    } catch (error) {
+      console.error('Failed to stop lab:', error);
+      alert('Failed to stop lab. Please try again.');
+    } finally {
+      setStopping(false);
+    }
   };
 
   if (loading) {
@@ -341,6 +317,27 @@ function LabSessionPageContent() {
               <span>
                 Ends in {String(isFinite(overallCountdown.mins) ? overallCountdown.mins : 0).padStart(2, "0")}:{String(isFinite(overallCountdown.secs) ? overallCountdown.secs : 0).padStart(2, "0")}
               </span>
+            </div>
+            <div className="flex items-center gap-2 ml-4">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleStopLab}
+                disabled={stopping}
+                className="gap-2"
+              >
+                {stopping ? (
+                  <>
+                    <Clock className="h-4 w-4 animate-spin" />
+                    Stopping...
+                  </>
+                ) : (
+                  <>
+                    <Server className="h-4 w-4" />
+                    Stop Lab
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </header>

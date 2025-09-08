@@ -15,11 +15,6 @@ import (
 	hapimodels "github.com/spectrocloud/hapi/models"
 )
 
-// Constants
-const (
-	PlaceholderTenantID = "TODO_TENANT_ID"
-)
-
 // PaletteTenantService handles setup and cleanup for Palette Tenant user accounts
 type PaletteTenantService struct {
 	host           string
@@ -457,7 +452,7 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 	fmt.Printf("Cleaning up Palette Tenant resources for lab %s:\n", ctx.LabID)
 
 	// Delete Tenant (only if we found the tenant ID)
-	if tenantID != "" && tenantID != PlaceholderTenantID {
+	if tenantID != "" {
 		fmt.Printf("- Deleting tenant: %s\n", tenantID)
 		if err := pc.DeleteTenant(tenantID); err != nil {
 			fmt.Printf("Warning: Failed to delete tenant: %v\n", err)

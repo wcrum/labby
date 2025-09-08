@@ -19,11 +19,11 @@ export function LabManager() {
       setError("");
       const userLabs = await apiService.getUserLabs();
       setLabs(userLabs || []); // Ensure labs is always an array
-    } catch (err: any) {
+    } catch (err) {
       console.error("Failed to fetch labs:", err);
       
       // Check if it's an authentication error
-      if (err.message && err.message.includes("Invalid token")) {
+      if (err instanceof Error && err.message && err.message.includes("Invalid token")) {
         setError("Authentication failed. Please log in again.");
         // Redirect to login or clear auth state
         apiService.clearToken();

@@ -15,7 +15,6 @@ import {
   RefreshCw, 
   ExternalLink, 
   ShieldCheck, 
-  Server, 
   User, 
   Users,
   Activity,
@@ -44,7 +43,7 @@ async function fetchAllLabSessions(): Promise<LabSession[]> {
       status: lab.status,
       startedAt: lab.started_at,
       endsAt: lab.ends_at,
-      owner: lab.owner || { name: "Unknown", email: "unknown@example.com" },
+      owner: lab.owner || { name: "Unknown", email: "unknown" },
       credentials: lab.credentials.map(cred => ({
         id: cred.id,
         label: cred.label,
@@ -130,12 +129,11 @@ function AdminPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm] = useState("");
   const [statusFilter] = useState<string>("all");
-  const [cleanupProjectName, setCleanupProjectName] = useState("");
-  const [cleanupLoading, setCleanupLoading] = useState(false);
-  const [cleanupMessage, setCleanupMessage] = useState("");
   const [serviceUsage, setServiceUsage] = useState<ServiceUsage[]>([]);
   const [serviceConfigs, setServiceConfigs] = useState<ServiceConfig[]>([]);
   const [serviceLimits, setServiceLimits] = useState<ServiceLimit[]>([]);
+
+
 
   // Get countdown data for all labs using a single hook
   const labCountdowns = useAllCountdowns(labs);
@@ -189,27 +187,10 @@ function AdminPageContent() {
     return () => { live = false; clearInterval(poll); };
   }, []);
 
-  const handleCleanupPaletteProject = async () => {
-    if (!cleanupProjectName.trim()) return;
-    
-    setCleanupLoading(true);
-    setCleanupMessage("");
-    
-    try {
-      await apiService.cleanupPaletteProject(cleanupProjectName.trim());
-      setCleanupMessage("Palette Project cleanup completed successfully!");
-      setCleanupProjectName("");
-    } catch (error) {
-      setCleanupMessage(`Cleanup failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setCleanupLoading(false);
-    }
-  };
-
   const filteredLabs = labs.filter(lab => {
     const matchesSearch = lab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (lab.owner?.name || "Unknown").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (lab.owner?.email || "unknown@example.com").toLowerCase().includes(searchTerm.toLowerCase());
+                         (lab.owner?.email || "unknown").toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || lab.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -221,6 +202,8 @@ function AdminPageContent() {
     error: labs.filter(l => l.status === "error").length,
     expired: labs.filter(l => l.status === "expired").length,
   };
+
+
 
   if (loading) {
     return (
@@ -245,8 +228,8 @@ function AdminPageContent() {
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-semibold">Lab Administration</h1>
-            <p className="text-muted-foreground">Monitor and manage lab session</p>
+            <h1 className="text-3xl md:text-4xl font-semibold">Admin Dashboard</h1>
+            <p className="text-muted-foreground">Monitor and manage lab sessions</p>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -330,7 +313,7 @@ function AdminPageContent() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Errors</p>
+                  <p className="text-sm font-medium text-muted-foreground">Errors & Expired</p>
                   <p className="text-2xl font-bold text-red-600">{stats.error + stats.expired}</p>
                 </div>
                 <ShieldCheck className="h-8 w-8 text-red-600" />
@@ -418,57 +401,6 @@ function AdminPageContent() {
           </CardContent>
         </Card>
 
-        {/* Palette Project Cleanup Section */}
-        <Card className="rounded-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Server className="h-5 w-5" />
-              Palette Project Cleanup Tool
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                Enter a palette project name to directly clean up its resources (API keys, users, projects, etc.)
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter project name (e.g., lab-482407e5)"
-                  value={cleanupProjectName}
-                  onChange={(e) => setCleanupProjectName(e.target.value)}
-                  className="flex-1"
-                />
-                <Button 
-                  onClick={handleCleanupPaletteProject}
-                  disabled={!cleanupProjectName.trim() || cleanupLoading}
-                  variant="destructive"
-                  className="gap-2"
-                >
-                  {cleanupLoading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Cleaning...
-                    </>
-                  ) : (
-                    <>
-                      <Server className="h-4 w-4" />
-                      Cleanup Project
-                    </>
-                  )}
-                </Button>
-              </div>
-              {cleanupMessage && (
-                <div className={`text-sm p-3 rounded-md ${
-                  cleanupMessage.includes('success') 
-                    ? 'bg-green-50 text-green-700 border border-green-200' 
-                    : 'bg-red-50 text-red-700 border border-red-200'
-                }`}>
-                  {cleanupMessage}
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
 
       {/* Lab Overview */}
       {filteredLabs.map((lab) => {
@@ -495,7 +427,7 @@ function AdminPageContent() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <User className="h-4 w-4" />
-                        {lab.owner?.name || "Unknown"} ({lab.owner?.email || "unknown@example.com"})
+                        {lab.owner?.name || "Unknown"} ({lab.owner?.email || "unknown"})
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
@@ -548,12 +480,12 @@ function AdminPageContent() {
                               const data = await fetchAllLabSessions();
                               setLabs(data);
                             } catch (error) {
-                              console.error('Failed to cleanup lab:', error);
-                              alert('Failed to cleanup lab');
+                                console.error('Failed to cleanup lab:', error);
+                                alert('Failed to cleanup lab');
+                              }
                             }
-                          }
-                        }}
-                      >
+                          }}
+                        >
                         Cleanup
                       </Button>
                       <Button
@@ -567,12 +499,12 @@ function AdminPageContent() {
                               const data = await fetchAllLabSessions();
                               setLabs(data);
                             } catch (error) {
-                              console.error('Failed to delete lab:', error);
-                              alert('Failed to delete lab');
+                                console.error('Failed to delete lab:', error);
+                                alert('Failed to delete lab');
+                              }
                             }
-                          }
-                        }}
-                      >
+                          }}
+                        >
                         Delete
                       </Button>
                     </div>
