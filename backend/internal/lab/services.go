@@ -20,11 +20,8 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 	paletteService.ConfigureFromServiceConfig(serviceConfig)
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating Project", "failed", "Lab not found")
 		return
 	}
@@ -64,18 +61,15 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := paletteService.ExecuteSetup(setupCtx)
+	err = paletteService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Project setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette Project setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
 	}
 
@@ -91,11 +85,8 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 	proxmoxUserService.ConfigureFromServiceConfig(serviceConfig.Config)
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
@@ -135,18 +126,15 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := proxmoxUserService.ExecuteSetup(setupCtx)
+	err = proxmoxUserService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Proxmox user setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Proxmox user setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
 	}
 
@@ -192,17 +180,23 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	s.progressTracker.AddLog(labID, "Creating Palette Tenant service instance...")
 	paletteTenantService := services.NewPaletteTenantService()
 
-	// Log the environment variables that the service will use
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_host: %s", os.Getenv("palette_host")))
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_system_username: %s", os.Getenv("palette_system_username")))
-	s.progressTracker.AddLog(labID, "Service will use palette_system_password: [REDACTED]")
+	// Configure the service with credentials from service config
+	paletteTenantService.ConfigureFromServiceConfig(serviceConfig)
+
+	// Log the service config values that the service will use
+	if host, ok := serviceConfig.Config["palette_host"]; ok {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_host: %s", host))
+	}
+	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_system_username: %s", systemUsername))
+	}
+	if _, ok := serviceConfig.Config["palette_system_password"]; ok {
+		s.progressTracker.AddLog(labID, "Service will use palette_system_password: [REDACTED]")
+	}
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
@@ -242,18 +236,15 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := paletteTenantService.ExecuteSetup(setupCtx)
+	err = paletteTenantService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Tenant setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette Tenant setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
 	}
 
@@ -266,11 +257,8 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", serviceConfig.Config["organization"]))
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating Workspace", "failed", "Lab not found")
 		return
 	}
@@ -316,18 +304,15 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 	terraformCloudService.ConfigureFromServiceConfig(serviceConfig.Config, labID)
 
 	// Execute the real setup - services will update their own progress
-	err := terraformCloudService.ExecuteSetup(setupCtx)
+	err = terraformCloudService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Terraform Cloud setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
 	}
 
@@ -343,11 +328,8 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 	guacamoleService.ConfigureFromServiceConfig(serviceConfig.Config)
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
@@ -387,18 +369,15 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := guacamoleService.ExecuteSetup(setupCtx)
+	err = guacamoleService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Guacamole setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Guacamole setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
 	}
 

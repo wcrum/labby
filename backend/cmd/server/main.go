@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/wcrum/labby/internal/auth"
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/handlers"
 	"github.com/wcrum/labby/internal/lab"
 
@@ -49,9 +50,25 @@ func main() {
 	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	port := getEnv("PORT", "8080")
 
+	// Initialize database
+	log.Println("Initializing database connection...")
+	dbConfig := database.NewConfig()
+	db, err := database.Connect(dbConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Run database migrations
+	log.Println("Running database migrations...")
+	repo := database.NewRepository(db)
+	if err := repo.AutoMigrate(); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+	log.Println("Database migrations completed successfully")
+
 	// Initialize services
-	authService := auth.NewService(jwtSecret)
-	labService := lab.NewService()
+	authService := auth.NewService(jwtSecret, repo)
+	labService := lab.NewService(repo)
 
 	// Load lab templates
 	if err := labService.LoadTemplates("./templates"); err != nil {
@@ -78,7 +95,7 @@ func main() {
 	log.Printf("Enriching templates with service type information")
 	labService.EnrichTemplatesWithServiceTypes()
 
-	handler := handlers.NewHandler(authService, labService)
+	handler := handlers.NewHandler(authService, labService, repo)
 
 	// Create a default admin user
 	adminUser, err := authService.CreateAdminUser("admin@spectrocloud.com", "Admin User")

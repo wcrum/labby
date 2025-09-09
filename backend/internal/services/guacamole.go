@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
@@ -28,10 +27,7 @@ type GuacamoleService struct {
 // NewGuacamoleService creates a new Guacamole service instance
 func NewGuacamoleService() *GuacamoleService {
 	return &GuacamoleService{
-		host:          os.Getenv("GUACAMOLE_HOST"),
-		adminUsername: os.Getenv("GUACAMOLE_ADMIN_USERNAME"),
-		adminPassword: os.Getenv("GUACAMOLE_ADMIN_PASSWORD"),
-		skipTLSVerify: os.Getenv("GUACAMOLE_SKIP_TLS_VERIFY") == "true",
+		// Credentials will be set via ConfigureFromServiceConfig()
 	}
 }
 

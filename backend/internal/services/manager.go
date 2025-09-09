@@ -3,20 +3,20 @@ package services
 import (
 	"fmt"
 
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/interfaces"
-	"github.com/wcrum/labby/internal/models"
 )
 
 // ServiceManager manages all available services
 type ServiceManager struct {
-	registry             *interfaces.ServiceRegistry
-	serviceConfigManager *models.ServiceConfigManager
+	registry *interfaces.ServiceRegistry
+	repo     *database.Repository
 	// Map service types to service instances
 	serviceTypeMap map[string]interfaces.Service
 }
 
 // NewServiceManager creates a new service manager
-func NewServiceManager(serviceConfigManager *models.ServiceConfigManager) *ServiceManager {
+func NewServiceManager(repo *database.Repository) *ServiceManager {
 	registry := interfaces.NewServiceRegistry()
 
 	// Create service instances
@@ -45,9 +45,9 @@ func NewServiceManager(serviceConfigManager *models.ServiceConfigManager) *Servi
 	serviceTypeMap["guacamole"] = guacamoleService
 
 	return &ServiceManager{
-		registry:             registry,
-		serviceConfigManager: serviceConfigManager,
-		serviceTypeMap:       serviceTypeMap,
+		registry:       registry,
+		repo:           repo,
+		serviceTypeMap: serviceTypeMap,
 	}
 }
 
@@ -64,9 +64,9 @@ func (sm *ServiceManager) GetServiceByType(serviceType string) (interfaces.Servi
 
 // GetServiceByConfigID returns a service by looking up the service type from the service config ID
 func (sm *ServiceManager) GetServiceByConfigID(configID string) (interfaces.Service, bool) {
-	// Get the service config to find the service type
-	serviceConfig, exists := sm.serviceConfigManager.GetServiceConfig(configID)
-	if !exists {
+	// Get the service config from database to find the service type
+	serviceConfig, err := sm.repo.GetServiceConfigByID(configID)
+	if err != nil {
 		return nil, false
 	}
 

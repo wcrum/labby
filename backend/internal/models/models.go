@@ -17,11 +17,11 @@ const (
 
 // User represents a lab user
 type User struct {
-	ID             string    `json:"id"`
-	Email          string    `json:"email"`
-	Name           string    `json:"name"`
-	Role           UserRole  `json:"role"`
-	OrganizationID *string   `json:"organization_id,omitempty"` // Optional organization membership
+	ID             string    `json:"id" gorm:"primaryKey;size:8"`
+	Email          string    `json:"email" gorm:"uniqueIndex;not null"`
+	Name           string    `json:"name" gorm:"not null"`
+	Role           UserRole  `json:"role" gorm:"not null;default:'user'"`
+	OrganizationID *string   `json:"organization_id,omitempty" gorm:"size:20"` // Optional organization membership
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -38,29 +38,29 @@ const (
 
 // Lab represents a lab session
 type Lab struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Status       LabStatus         `json:"status"`
-	OwnerID      string            `json:"owner_id"`
-	StartedAt    time.Time         `json:"started_at"`
-	EndsAt       time.Time         `json:"ends_at"`
+	ID           string            `json:"id" gorm:"primaryKey;size:8"`
+	Name         string            `json:"name" gorm:"not null"`
+	Status       LabStatus         `json:"status" gorm:"not null;default:'provisioning'"`
+	OwnerID      string            `json:"owner_id" gorm:"not null;size:8"`
+	StartedAt    time.Time         `json:"started_at" gorm:"not null"`
+	EndsAt       time.Time         `json:"ends_at" gorm:"not null"`
 	CreatedAt    time.Time         `json:"created_at"`
 	UpdatedAt    time.Time         `json:"updated_at"`
-	Credentials  []Credential      `json:"credentials"`
-	ServiceData  map[string]string `json:"service_data,omitempty"`  // Store service-specific data for cleanup
-	TemplateID   string            `json:"template_id,omitempty"`   // Reference to the template used
-	UsedServices []string          `json:"used_services,omitempty"` // Track which services were used for this lab
+	Credentials  []Credential      `json:"credentials" gorm:"foreignKey:LabID;constraint:OnDelete:CASCADE"`
+	ServiceData  map[string]string `json:"service_data,omitempty" gorm:"type:jsonb"`   // Store service-specific data for cleanup
+	TemplateID   string            `json:"template_id,omitempty" gorm:"size:255"`      // Reference to the template used
+	UsedServices []string          `json:"used_services,omitempty" gorm:"type:text[]"` // Track which services were used for this lab
 }
 
 // Credential represents access credentials for a lab service
 type Credential struct {
-	ID        string    `json:"id"`
-	LabID     string    `json:"lab_id"`
-	Label     string    `json:"label"`
-	Username  string    `json:"username"`
-	Password  string    `json:"password"`
+	ID        string    `json:"id" gorm:"primaryKey;size:8"`
+	LabID     string    `json:"lab_id" gorm:"not null;size:8;index"`
+	Label     string    `json:"label" gorm:"not null"`
+	Username  string    `json:"username" gorm:"not null"`
+	Password  string    `json:"password" gorm:"not null"`
 	URL       string    `json:"url,omitempty"`
-	ExpiresAt time.Time `json:"expires_at"`
+	ExpiresAt time.Time `json:"expires_at" gorm:"not null;index"`
 	Notes     string    `json:"notes,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -132,24 +132,24 @@ func GetRemainingTime(expiresAt time.Time) time.Duration {
 
 // ServiceLimit represents a limit for a specific service
 type ServiceLimit struct {
-	ID          string    `json:"id" yaml:"id"`
-	ServiceID   string    `json:"service_id" yaml:"service_id"`     // Reference to ServiceConfig
-	MaxLabs     int       `json:"max_labs" yaml:"max_labs"`         // Maximum number of concurrent labs using this service
-	MaxDuration int       `json:"max_duration" yaml:"max_duration"` // Maximum duration in minutes
-	IsActive    bool      `json:"is_active" yaml:"is_active"`       // Whether this limit is currently active
+	ID          string    `json:"id" yaml:"id" gorm:"primaryKey"`
+	ServiceID   string    `json:"service_id" yaml:"service_id" gorm:"not null;size:20;index"`   // Reference to ServiceConfig
+	MaxLabs     int       `json:"max_labs" yaml:"max_labs" gorm:"not null;default:10"`          // Maximum number of concurrent labs using this service
+	MaxDuration int       `json:"max_duration" yaml:"max_duration" gorm:"not null;default:480"` // Maximum duration in minutes
+	IsActive    bool      `json:"is_active" yaml:"is_active" gorm:"not null;default:true"`      // Whether this limit is currently active
 	CreatedAt   time.Time `json:"created_at" yaml:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // ServiceConfig represents a preconfigured service configuration
 type ServiceConfig struct {
-	ID          string            `json:"id" yaml:"id"`
-	Name        string            `json:"name" yaml:"name"`
-	Type        string            `json:"type" yaml:"type"` // palette_project, palette_tenant, proxmox_user
+	ID          string            `json:"id" yaml:"id" gorm:"primaryKey"`
+	Name        string            `json:"name" yaml:"name" gorm:"not null"`
+	Type        string            `json:"type" yaml:"type" gorm:"not null;index"` // palette_project, palette_tenant, proxmox_user
 	Description string            `json:"description" yaml:"description"`
-	Logo        string            `json:"logo" yaml:"logo"`           // Path to logo file (SVG/PNG)
-	Config      map[string]string `json:"config" yaml:"config"`       // Service-specific configuration
-	IsActive    bool              `json:"is_active" yaml:"is_active"` // Whether this service config is available
+	Logo        string            `json:"logo" yaml:"logo"`                                              // Path to logo file (SVG/PNG)
+	Config      map[string]string `json:"config" yaml:"config" gorm:"type:jsonb;not null;default:'{}'"`  // Service-specific configuration
+	IsActive    bool              `json:"is_active" yaml:"is_active" gorm:"not null;default:true;index"` // Whether this service config is available
 	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`
 	UpdatedAt   time.Time         `json:"updated_at" yaml:"updated_at"`
 }

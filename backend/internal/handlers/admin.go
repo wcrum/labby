@@ -80,7 +80,11 @@ func (h *Handler) GetAllLabs(c *gin.Context) {
 	userObj := user.(*models.User)
 	fmt.Printf("GetAllLabs: User %s (role: %s) requesting all labs\n", userObj.Email, userObj.Role)
 
-	labs := h.labService.GetAllLabs()
+	labs, err := h.labService.GetAllLabs()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve labs"})
+		return
+	}
 	fmt.Printf("GetAllLabs: Found %d labs\n", len(labs))
 
 	// Convert Labs to LabResponses
@@ -140,7 +144,11 @@ func (h *Handler) LoadTemplates(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /admin/users [get]
 func (h *Handler) GetUsers(c *gin.Context) {
-	users := h.authService.GetAllUsers()
+	users, err := h.authService.GetAllUsers()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve users"})
+		return
+	}
 
 	// Convert users to UserWithOrganization format
 	usersWithOrg := make([]*models.UserWithOrganization, len(users))
@@ -312,8 +320,7 @@ func (h *Handler) AdminCleanupService(c *gin.Context) {
 	}
 
 	// Get service manager
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get the service by type
 	service, exists := serviceManager.GetServiceByType(req.ServiceType)
@@ -324,8 +331,8 @@ func (h *Handler) AdminCleanupService(c *gin.Context) {
 
 	// Configure service with service config if provided
 	if req.ServiceConfigID != "" {
-		serviceConfig, exists := serviceConfigManager.GetServiceConfig(req.ServiceConfigID)
-		if !exists {
+		serviceConfig, err := h.repo.GetServiceConfigByID(req.ServiceConfigID)
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service config '%s' not found", req.ServiceConfigID)})
 			return
 		}
@@ -376,10 +383,12 @@ func (h *Handler) AdminCleanupService(c *gin.Context) {
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Router /admin/cleanup/services [get]
 func (h *Handler) AdminGetAvailableServices(c *gin.Context) {
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-
-	// Get all service configs
-	serviceConfigs := serviceConfigManager.GetAllServiceConfigs()
+	// Get all service configs from database
+	serviceConfigs, err := h.repo.GetAllServiceConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service configs"})
+		return
+	}
 
 	// Group by service type
 	servicesByType := make(map[string][]ServiceInfo)
@@ -459,12 +468,11 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 	}
 
 	// Get service manager
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get the specific service config
-	serviceConfig, exists := serviceConfigManager.GetServiceConfig(req.ServiceConfigID)
-	if !exists {
+	serviceConfig, err := h.repo.GetServiceConfigByID(req.ServiceConfigID)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service config '%s' not found", req.ServiceConfigID)})
 		return
 	}
@@ -508,7 +516,7 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 	}
 
 	// Execute cleanup
-	err := service.ExecuteCleanup(cleanupCtx)
+	err = service.ExecuteCleanup(cleanupCtx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup service config '%s': %v", req.ServiceConfigID, err)})
 		return
@@ -574,11 +582,14 @@ func (h *Handler) AdminCleanupByLab(c *gin.Context) {
 	}
 
 	// Get service manager
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get all available service types
-	serviceConfigs := serviceConfigManager.GetAllServiceConfigs()
+	serviceConfigs, err := h.repo.GetAllServiceConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service configs"})
+		return
+	}
 	serviceTypes := make(map[string]bool)
 	for _, config := range serviceConfigs {
 		serviceTypes[config.Type] = true
@@ -748,7 +759,11 @@ func getCleanupParametersForServiceType(serviceType string) []ParameterInfo {
 // @Success 200 {array} models.ServiceConfig
 // @Router /admin/service-configs [get]
 func (h *Handler) GetServiceConfigs(c *gin.Context) {
-	configs := h.labService.GetServiceConfigManager().GetAllServiceConfigs()
+	configs, err := h.repo.GetAllServiceConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service configs"})
+		return
+	}
 	c.JSON(http.StatusOK, configs)
 }
 
@@ -761,7 +776,11 @@ func (h *Handler) GetServiceConfigs(c *gin.Context) {
 // @Success 200 {array} models.ServiceLimit
 // @Router /admin/service-limits [get]
 func (h *Handler) GetServiceLimits(c *gin.Context) {
-	limits := h.labService.GetServiceConfigManager().GetAllServiceLimits()
+	limits, err := h.repo.GetAllServiceLimits()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service limits"})
+		return
+	}
 	c.JSON(http.StatusOK, limits)
 }
 
@@ -800,7 +819,10 @@ func (h *Handler) CreateServiceConfig(c *gin.Context) {
 	config.CreatedAt = now
 	config.UpdatedAt = now
 
-	h.labService.GetServiceConfigManager().AddServiceConfig(&config)
+	if err := h.repo.CreateServiceConfig(&config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service config"})
+		return
+	}
 	c.JSON(http.StatusCreated, config)
 }
 
@@ -826,7 +848,10 @@ func (h *Handler) CreateServiceLimit(c *gin.Context) {
 	limit.CreatedAt = now
 	limit.UpdatedAt = now
 
-	h.labService.GetServiceConfigManager().AddServiceLimit(&limit)
+	if err := h.repo.CreateServiceLimit(&limit); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service limit"})
+		return
+	}
 	c.JSON(http.StatusCreated, limit)
 }
 
@@ -853,7 +878,10 @@ func (h *Handler) UpdateServiceConfig(c *gin.Context) {
 	config.ID = id
 	config.UpdatedAt = time.Now()
 
-	h.labService.GetServiceConfigManager().AddServiceConfig(&config)
+	if err := h.repo.UpdateServiceConfig(&config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update service config"})
+		return
+	}
 	c.JSON(http.StatusOK, config)
 }
 
@@ -880,7 +908,10 @@ func (h *Handler) UpdateServiceLimit(c *gin.Context) {
 	limit.ID = id
 	limit.UpdatedAt = time.Now()
 
-	h.labService.GetServiceConfigManager().AddServiceLimit(&limit)
+	if err := h.repo.UpdateServiceLimit(&limit); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update service limit"})
+		return
+	}
 	c.JSON(http.StatusOK, limit)
 }
 
@@ -895,7 +926,10 @@ func (h *Handler) UpdateServiceLimit(c *gin.Context) {
 // @Router /admin/service-configs/{id} [delete]
 func (h *Handler) DeleteServiceConfig(c *gin.Context) {
 	id := c.Param("id")
-	h.labService.GetServiceConfigManager().RemoveServiceConfig(id)
+	if err := h.repo.DeleteServiceConfig(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service config"})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }
 
@@ -910,6 +944,9 @@ func (h *Handler) DeleteServiceConfig(c *gin.Context) {
 // @Router /admin/service-limits/{id} [delete]
 func (h *Handler) DeleteServiceLimit(c *gin.Context) {
 	id := c.Param("id")
-	h.labService.GetServiceConfigManager().RemoveServiceLimit(id)
+	if err := h.repo.DeleteServiceLimit(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service limit"})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }

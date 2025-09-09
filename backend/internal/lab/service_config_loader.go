@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/models"
 
 	"gopkg.in/yaml.v3"
@@ -14,13 +15,13 @@ import (
 
 // ServiceConfigLoader loads service configurations from files
 type ServiceConfigLoader struct {
-	serviceConfigManager *models.ServiceConfigManager
+	repo *database.Repository
 }
 
 // NewServiceConfigLoader creates a new service configuration loader
-func NewServiceConfigLoader(serviceConfigManager *models.ServiceConfigManager) *ServiceConfigLoader {
+func NewServiceConfigLoader(repo *database.Repository) *ServiceConfigLoader {
 	return &ServiceConfigLoader{
-		serviceConfigManager: serviceConfigManager,
+		repo: repo,
 	}
 }
 
@@ -81,7 +82,13 @@ func (scl *ServiceConfigLoader) LoadServiceConfigFromFile(filePath string) error
 		return fmt.Errorf("invalid service config in %s: %w", filePath, err)
 	}
 
-	scl.serviceConfigManager.AddServiceConfig(&serviceConfig)
+	// Save to database
+	if err := scl.repo.CreateServiceConfig(&serviceConfig); err != nil {
+		fmt.Printf("ServiceConfigLoader.LoadServiceConfigFromFile: Failed to save service config %s to database: %v\n", serviceConfig.ID, err)
+		return fmt.Errorf("failed to save service config to database: %w", err)
+	}
+	fmt.Printf("ServiceConfigLoader.LoadServiceConfigFromFile: Successfully saved service config %s to database\n", serviceConfig.ID)
+
 	fmt.Printf("ServiceConfigLoader.LoadServiceConfigFromFile: Successfully added service config %s\n", serviceConfig.ID)
 	return nil
 }
@@ -173,7 +180,13 @@ func (scl *ServiceConfigLoader) LoadServiceLimitsFromFile(filePath string) error
 			return fmt.Errorf("invalid service limit at index %d: %w", i, err)
 		}
 
-		scl.serviceConfigManager.AddServiceLimit(&limits[i])
+		// Save to database
+		if err := scl.repo.CreateServiceLimit(&limits[i]); err != nil {
+			fmt.Printf("ServiceConfigLoader.LoadServiceLimitsFromFile: Failed to save service limit for %s to database: %v\n", limits[i].ServiceID, err)
+			return fmt.Errorf("failed to save service limit to database: %w", err)
+		}
+		fmt.Printf("ServiceConfigLoader.LoadServiceLimitsFromFile: Successfully saved service limit for %s to database\n", limits[i].ServiceID)
+
 		fmt.Printf("ServiceConfigLoader.LoadServiceLimitsFromFile: Successfully added limit for service %s\n", limits[i].ServiceID)
 	}
 

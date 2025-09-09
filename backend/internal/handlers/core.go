@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/wcrum/labby/internal/auth"
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/lab"
 	"github.com/wcrum/labby/internal/models"
 
@@ -14,13 +15,15 @@ import (
 type Handler struct {
 	authService *auth.Service
 	labService  *lab.Service
+	repo        *database.Repository
 }
 
 // NewHandler creates a new handler
-func NewHandler(authService *auth.Service, labService *lab.Service) *Handler {
+func NewHandler(authService *auth.Service, labService *lab.Service, repo *database.Repository) *Handler {
 	return &Handler{
 		authService: authService,
 		labService:  labService,
+		repo:        repo,
 	}
 }
 

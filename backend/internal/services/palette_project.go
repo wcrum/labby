@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -30,9 +29,7 @@ type PaletteProjectService struct {
 // NewPaletteProjectService creates a new Palette Project service instance
 func NewPaletteProjectService() *PaletteProjectService {
 	return &PaletteProjectService{
-		host:       os.Getenv("PALETTE_HOST"),
-		apiKey:     os.Getenv("PALETTE_API_KEY"),
-		projectUID: os.Getenv("PALETTE_PROJECT_UID"),
+		// Credentials will be set via ConfigureFromServiceConfig()
 	}
 }
 

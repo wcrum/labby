@@ -3,11 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 
 	internalclient "github.com/spectrocloud/palette-sdk-go-internal/client"
 
@@ -25,9 +25,20 @@ type PaletteTenantService struct {
 // NewPaletteTenantService creates a new Palette Tenant service instance
 func NewPaletteTenantService() *PaletteTenantService {
 	return &PaletteTenantService{
-		host:           os.Getenv("palette_host"),
-		systemUsername: os.Getenv("palette_system_username"),
-		systemPassword: os.Getenv("palette_system_password"),
+		// Credentials will be set via ConfigureFromServiceConfig()
+	}
+}
+
+// ConfigureFromServiceConfig configures the service with credentials from service config
+func (v *PaletteTenantService) ConfigureFromServiceConfig(serviceConfig *models.ServiceConfig) {
+	if host, ok := serviceConfig.Config["palette_host"]; ok {
+		v.host = host
+	}
+	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
+		v.systemUsername = systemUsername
+	}
+	if systemPassword, ok := serviceConfig.Config["palette_system_password"]; ok {
+		v.systemPassword = systemPassword
 	}
 }
 

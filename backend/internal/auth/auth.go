@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/models"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -26,14 +27,14 @@ type JWTClaims struct {
 // Service handles authentication
 type Service struct {
 	jwtSecret []byte
-	users     map[string]*models.User // In-memory user store
+	repo      *database.Repository
 }
 
 // NewService creates a new auth service
-func NewService(jwtSecret string) *Service {
+func NewService(jwtSecret string, repo *database.Repository) *Service {
 	return &Service{
 		jwtSecret: []byte(jwtSecret),
-		users:     make(map[string]*models.User),
+		repo:      repo,
 	}
 }
 
@@ -45,16 +46,18 @@ func (s *Service) CreateUser(email, name string, role models.UserRole) (*models.
 // CreateUserWithOrganization creates a new user with optional organization
 func (s *Service) CreateUserWithOrganization(email, name string, role models.UserRole, organizationID *string) (*models.User, error) {
 	// Check if user already exists
-	for _, user := range s.users {
-		if user.Email == email {
-			// If user exists but has no organization and we're providing one, update it
-			if user.OrganizationID == nil && organizationID != nil {
-				user.OrganizationID = organizationID
-				user.UpdatedAt = time.Now()
-				fmt.Printf("DEBUG: Updated existing user %s with organization %s\n", user.Email, *organizationID)
+	existingUser, err := s.repo.GetUserByEmail(email)
+	if err == nil {
+		// If user exists but has no organization and we're providing one, update it
+		if existingUser.OrganizationID == nil && organizationID != nil {
+			existingUser.OrganizationID = organizationID
+			existingUser.UpdatedAt = time.Now()
+			if err := s.repo.UpdateUser(existingUser); err != nil {
+				return nil, fmt.Errorf("failed to update user organization: %w", err)
 			}
-			return user, nil
+			fmt.Printf("DEBUG: Updated existing user %s with organization %s\n", existingUser.Email, *organizationID)
 		}
+		return existingUser, nil
 	}
 
 	// Create new user
@@ -69,7 +72,10 @@ func (s *Service) CreateUserWithOrganization(email, name string, role models.Use
 		UpdatedAt:      now,
 	}
 
-	s.users[user.ID] = user
+	if err := s.repo.CreateUser(user); err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
 	if organizationID != nil {
 		fmt.Printf("DEBUG: Created new user: %s (ID: %s) with organization %s\n", user.Email, user.ID, *organizationID)
 	} else {
@@ -85,21 +91,12 @@ func stringPtr(s string) *string {
 
 // GetUserByID retrieves a user by ID
 func (s *Service) GetUserByID(userID string) (*models.User, error) {
-	user, exists := s.users[userID]
-	if !exists {
-		return nil, errors.New("user not found")
-	}
-	return user, nil
+	return s.repo.GetUserByID(userID)
 }
 
 // GetUserByEmail retrieves a user by email
 func (s *Service) GetUserByEmail(email string) (*models.User, error) {
-	for _, user := range s.users {
-		if user.Email == email {
-			return user, nil
-		}
-	}
-	return nil, errors.New("user not found")
+	return s.repo.GetUserByEmail(email)
 }
 
 // Login performs authentication
@@ -174,12 +171,8 @@ func (s *Service) ValidateToken(tokenString string) (*models.User, error) {
 }
 
 // GetAllUsers returns all users (for admin purposes)
-func (s *Service) GetAllUsers() []*models.User {
-	users := make([]*models.User, 0, len(s.users))
-	for _, user := range s.users {
-		users = append(users, user)
-	}
-	return users
+func (s *Service) GetAllUsers() ([]*models.User, error) {
+	return s.repo.GetAllUsers()
 }
 
 // CreateAdminUser creates an admin user
@@ -189,21 +182,21 @@ func (s *Service) CreateAdminUser(email, name string) (*models.User, error) {
 
 // UpdateUserRole updates a user's role
 func (s *Service) UpdateUserRole(userID string, role models.UserRole) error {
-	user, exists := s.users[userID]
-	if !exists {
+	user, err := s.repo.GetUserByID(userID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 	user.Role = role
 	user.UpdatedAt = time.Now()
-	return nil
+	return s.repo.UpdateUser(user)
 }
 
 // UpdateUserOrganization updates a user's organization
 func (s *Service) UpdateUserOrganization(userID string, organizationID *string) error {
 	fmt.Printf("DEBUG: UpdateUserOrganization called for userID: %s, organizationID: %v\n", userID, organizationID)
 
-	user, exists := s.users[userID]
-	if !exists {
+	user, err := s.repo.GetUserByID(userID)
+	if err != nil {
 		fmt.Printf("ERROR: User not found with ID: %s\n", userID)
 		return errors.New("user not found")
 	}
@@ -213,14 +206,18 @@ func (s *Service) UpdateUserOrganization(userID string, organizationID *string) 
 	user.OrganizationID = organizationID
 	user.UpdatedAt = time.Now()
 
+	if err := s.repo.UpdateUser(user); err != nil {
+		return fmt.Errorf("failed to update user organization: %w", err)
+	}
+
 	fmt.Printf("DEBUG: Updated user organization to: %v\n", user.OrganizationID)
 	return nil
 }
 
 // AssignUserToDefaultOrganization assigns a user to the default organization if they don't have one
 func (s *Service) AssignUserToDefaultOrganization(userID string) error {
-	user, exists := s.users[userID]
-	if !exists {
+	user, err := s.repo.GetUserByID(userID)
+	if err != nil {
 		return errors.New("user not found")
 	}
 
@@ -228,6 +225,9 @@ func (s *Service) AssignUserToDefaultOrganization(userID string) error {
 	if user.OrganizationID == nil {
 		user.OrganizationID = stringPtr("org-default")
 		user.UpdatedAt = time.Now()
+		if err := s.repo.UpdateUser(user); err != nil {
+			return fmt.Errorf("failed to update user organization: %w", err)
+		}
 		fmt.Printf("DEBUG: Assigned user %s to default organization\n", user.Email)
 	}
 
@@ -241,9 +241,5 @@ func (s *Service) IsAdmin(user *models.User) bool {
 
 // DeleteUser deletes a user
 func (s *Service) DeleteUser(userID string) error {
-	if _, exists := s.users[userID]; !exists {
-		return errors.New("user not found")
-	}
-	delete(s.users, userID)
-	return nil
+	return s.repo.DeleteUser(userID)
 }

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -28,10 +27,7 @@ type ProxmoxUserService struct {
 // NewProxmoxUserService creates a new Proxmox user service instance
 func NewProxmoxUserService() *ProxmoxUserService {
 	return &ProxmoxUserService{
-		uri:           os.Getenv("PROXMOX_URI"),
-		adminUser:     os.Getenv("PROXMOX_ADMIN_USER"),
-		adminPass:     os.Getenv("PROXMOX_ADMIN_PASS"),
-		skipTLSVerify: os.Getenv("PROXMOX_SKIP_TLS_VERIFY") == "true",
+		// Credentials will be set via ConfigureFromServiceConfig()
 	}
 }
 

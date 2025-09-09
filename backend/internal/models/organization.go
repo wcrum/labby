@@ -6,34 +6,34 @@ import (
 
 // Organization represents a group of users with access to specific labs
 type Organization struct {
-	ID          string    `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Description string    `json:"description" db:"description"`
-	Domain      string    `json:"domain" db:"domain"` // Optional domain for organization
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	ID          string    `json:"id" gorm:"primaryKey;size:8"`
+	Name        string    `json:"name" gorm:"not null"`
+	Description string    `json:"description"`
+	Domain      string    `json:"domain" gorm:"index"` // Optional domain for organization
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // OrganizationMember represents a user's membership in an organization
 type OrganizationMember struct {
-	ID             string    `json:"id" db:"id"`
-	OrganizationID string    `json:"organization_id" db:"organization_id"`
-	UserID         string    `json:"user_id" db:"user_id"`
-	Role           string    `json:"role" db:"role"` // "owner", "admin", "member"
-	JoinedAt       time.Time `json:"joined_at" db:"joined_at"`
+	ID             string    `json:"id" gorm:"primaryKey;size:8"`
+	OrganizationID string    `json:"organization_id" gorm:"not null;size:20;index"`
+	UserID         string    `json:"user_id" gorm:"not null;size:8;index"`
+	Role           string    `json:"role" gorm:"not null;default:'member'"` // "owner", "admin", "member"
+	JoinedAt       time.Time `json:"joined_at"`
 }
 
 // Invite represents an invitation to join an organization
 type Invite struct {
-	ID             string     `json:"id" db:"id"`
-	OrganizationID string     `json:"organization_id" db:"organization_id"`
-	Email          string     `json:"email" db:"email"`
-	InvitedBy      string     `json:"invited_by" db:"invited_by"`
-	Role           string     `json:"role" db:"role"`     // "admin", "member"
-	Status         string     `json:"status" db:"status"` // "pending", "accepted", "expired"
-	ExpiresAt      time.Time  `json:"expires_at" db:"expires_at"`
-	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
-	AcceptedAt     *time.Time `json:"accepted_at" db:"accepted_at"`
+	ID             string     `json:"id" gorm:"primaryKey;size:8"`
+	OrganizationID string     `json:"organization_id" gorm:"not null;size:20;index"`
+	Email          string     `json:"email" gorm:"not null;index"`
+	InvitedBy      string     `json:"invited_by" gorm:"not null;size:8"`
+	Role           string     `json:"role" gorm:"not null;default:'member'"`          // "admin", "member"
+	Status         string     `json:"status" gorm:"not null;default:'pending';index"` // "pending", "accepted", "expired"
+	ExpiresAt      time.Time  `json:"expires_at" gorm:"not null"`
+	CreatedAt      time.Time  `json:"created_at"`
+	AcceptedAt     *time.Time `json:"accepted_at"`
 }
 
 // CreateInviteRequest represents a request to create an invitation

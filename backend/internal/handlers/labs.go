@@ -245,8 +245,7 @@ func (h *Handler) CleanupPaletteProject(c *gin.Context) {
 	}
 
 	// Execute palette project cleanup directly
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get the service by type (palette_project)
 	paletteService, exists := serviceManager.GetServiceByType("palette_project")

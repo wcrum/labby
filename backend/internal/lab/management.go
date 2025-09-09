@@ -11,17 +11,17 @@ import (
 
 // GetLab retrieves a lab by ID
 func (s *Service) GetLab(labID string) (*models.Lab, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	lab, exists := s.labs[labID]
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		return nil, ErrLabNotFound
 	}
 
 	// Check if lab is expired
 	if models.IsExpired(lab.EndsAt) {
 		lab.Status = models.LabStatusExpired
+		// Update the lab status in the database
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 	}
 
 	return lab, nil
@@ -29,17 +29,17 @@ func (s *Service) GetLab(labID string) (*models.Lab, error) {
 
 // GetLabsByOwner retrieves all labs for a specific owner
 func (s *Service) GetLabsByOwner(ownerID string) ([]*models.Lab, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	labs, err := s.repo.GetLabsByOwnerID(ownerID)
+	if err != nil {
+		return nil, err
+	}
 
-	var labs []*models.Lab
-	for _, lab := range s.labs {
-		if lab.OwnerID == ownerID {
-			// Check if lab is expired
-			if models.IsExpired(lab.EndsAt) {
-				lab.Status = models.LabStatusExpired
-			}
-			labs = append(labs, lab)
+	// Check if any labs are expired and update them
+	for _, lab := range labs {
+		if models.IsExpired(lab.EndsAt) && lab.Status != models.LabStatusExpired {
+			lab.Status = models.LabStatusExpired
+			lab.UpdatedAt = time.Now()
+			s.repo.UpdateLab(lab)
 		}
 	}
 
@@ -47,29 +47,28 @@ func (s *Service) GetLabsByOwner(ownerID string) ([]*models.Lab, error) {
 }
 
 // GetAllLabs retrieves all labs (for admin purposes)
-func (s *Service) GetAllLabs() []*models.Lab {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	labs := make([]*models.Lab, 0, len(s.labs))
-	for _, lab := range s.labs {
-		// Check if lab is expired
-		if models.IsExpired(lab.EndsAt) {
-			lab.Status = models.LabStatusExpired
-		}
-		labs = append(labs, lab)
+func (s *Service) GetAllLabs() ([]*models.Lab, error) {
+	labs, err := s.repo.GetAllLabs()
+	if err != nil {
+		return nil, err
 	}
 
-	return labs
+	// Check if any labs are expired and update them
+	for _, lab := range labs {
+		if models.IsExpired(lab.EndsAt) && lab.Status != models.LabStatusExpired {
+			lab.Status = models.LabStatusExpired
+			lab.UpdatedAt = time.Now()
+			s.repo.UpdateLab(lab)
+		}
+	}
+
+	return labs, nil
 }
 
 // DeleteLab deletes a lab
 func (s *Service) DeleteLab(labID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	lab, exists := s.labs[labID]
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		return ErrLabNotFound
 	}
 
@@ -89,19 +88,14 @@ func (s *Service) DeleteLab(labID string) error {
 	// Cleanup progress tracking
 	s.progressTracker.CleanupProgress(labID)
 
-	// Remove the lab
-	delete(s.labs, labID)
-
-	return nil
+	// Delete the lab from database
+	return s.repo.DeleteLab(labID)
 }
 
 // StopLab stops a lab (marks it as expired)
 func (s *Service) StopLab(labID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	lab, exists := s.labs[labID]
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		return ErrLabNotFound
 	}
 
@@ -123,34 +117,40 @@ func (s *Service) StopLab(labID string) error {
 		fmt.Printf("StopLab: Cleanup failed for lab %s: %v\n", labID, err)
 	}
 
-	return nil
+	// Update the lab in the database
+	return s.repo.UpdateLab(lab)
 }
 
 // CleanupExpiredLabs removes expired labs (should be called periodically)
 func (s *Service) CleanupExpiredLabs() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Get expired labs from database
+	expiredLabs, err := s.repo.GetExpiredLabs()
+	if err != nil {
+		fmt.Printf("CleanupExpiredLabs: Failed to get expired labs: %v\n", err)
+		return
+	}
 
-	now := time.Now()
-	for labID, lab := range s.labs {
-		if now.After(lab.EndsAt) {
-			// Create cleanup context for expired lab
-			cleanupCtx := &interfaces.CleanupContext{
-				LabID:   labID,
-				Context: context.Background(),
-				Lab:     lab,
-			}
+	for _, lab := range expiredLabs {
+		// Create cleanup context for expired lab
+		cleanupCtx := &interfaces.CleanupContext{
+			LabID:   lab.ID,
+			Context: context.Background(),
+			Lab:     lab,
+		}
 
-			// Cleanup lab services before removing from memory
-			if err := s.serviceManager.CleanupLabServices(cleanupCtx); err != nil {
-				fmt.Printf("Warning: Failed to cleanup expired lab services for lab %s: %v\n", labID, err)
-			}
+		// Cleanup lab services
+		if err := s.serviceManager.CleanupLabServices(cleanupCtx); err != nil {
+			fmt.Printf("CleanupExpiredLabs: Failed to cleanup lab %s: %v\n", lab.ID, err)
+		}
 
-			// Cleanup progress tracking
-			s.progressTracker.CleanupProgress(labID)
+		// Cleanup progress tracking
+		s.progressTracker.CleanupProgress(lab.ID)
 
-			// Remove the lab from memory
-			delete(s.labs, labID)
+		// Update lab status to expired
+		lab.Status = models.LabStatusExpired
+		lab.UpdatedAt = time.Now()
+		if err := s.repo.UpdateLab(lab); err != nil {
+			fmt.Printf("CleanupExpiredLabs: Failed to update lab %s status: %v\n", lab.ID, err)
 		}
 	}
 }
@@ -164,26 +164,36 @@ func (s *Service) CleanupFailedLabs() {
 	// Clean up labs that have been in error status for more than 1 hour
 	errorThreshold := time.Hour
 
-	for labID, lab := range s.labs {
+	// Get all labs from database
+	labs, err := s.repo.GetAllLabs()
+	if err != nil {
+		fmt.Printf("CleanupFailedLabs: Failed to get labs: %v\n", err)
+		return
+	}
+
+	for _, lab := range labs {
 		if lab.Status == models.LabStatusError {
 			timeSinceError := now.Sub(lab.UpdatedAt)
 			if timeSinceError > errorThreshold {
 				// Create cleanup context for failed lab
 				cleanupCtx := &interfaces.CleanupContext{
-					LabID:   labID,
+					LabID:   lab.ID,
 					Context: context.Background(),
 					Lab:     lab,
 				}
 
-				// Cleanup lab services before removing from memory
+				// Cleanup lab services
 				if err := s.serviceManager.CleanupLabServices(cleanupCtx); err != nil {
-					fmt.Printf("Warning: Failed to cleanup failed lab services for lab %s: %v\n", labID, err)
+					fmt.Printf("Warning: Failed to cleanup failed lab services for lab %s: %v\n", lab.ID, err)
 				}
 
 				// Cleanup progress tracking
-				s.progressTracker.CleanupProgress(labID)
-				// Remove the lab
-				delete(s.labs, labID)
+				s.progressTracker.CleanupProgress(lab.ID)
+
+				// Delete the lab from database
+				if err := s.repo.DeleteLab(lab.ID); err != nil {
+					fmt.Printf("Warning: Failed to delete failed lab %s: %v\n", lab.ID, err)
+				}
 			}
 		}
 	}

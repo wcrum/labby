@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/interfaces"
 	"github.com/wcrum/labby/internal/models"
 	"github.com/wcrum/labby/internal/services"
@@ -20,28 +21,24 @@ var (
 
 // Service handles lab lifecycle management
 type Service struct {
-	labs                 map[string]*models.Lab
-	mu                   sync.RWMutex
-	serviceManager       *services.ServiceManager
-	progressTracker      *ProgressTracker
-	templateManager      *models.LabTemplateManager
-	templateLoader       *TemplateLoader
-	serviceConfigManager *models.ServiceConfigManager
+	repo            *database.Repository
+	mu              sync.RWMutex
+	serviceManager  *services.ServiceManager
+	progressTracker *ProgressTracker
+	templateManager *models.LabTemplateManager
+	templateLoader  *TemplateLoader
 }
 
 // NewService creates a new lab service
-func NewService() *Service {
+func NewService(repo *database.Repository) *Service {
 	templateManager := models.NewLabTemplateManager()
 	templateLoader := NewTemplateLoader(templateManager)
-	serviceConfigManager := models.NewServiceConfigManager()
-
 	return &Service{
-		labs:                 make(map[string]*models.Lab),
-		serviceManager:       services.NewServiceManager(serviceConfigManager),
-		progressTracker:      NewProgressTracker(),
-		templateManager:      templateManager,
-		templateLoader:       templateLoader,
-		serviceConfigManager: serviceConfigManager,
+		repo:            repo,
+		serviceManager:  services.NewServiceManager(repo), // Pass repo instead of serviceConfigManager
+		progressTracker: NewProgressTracker(),
+		templateManager: templateManager,
+		templateLoader:  templateLoader,
 	}
 }
 
@@ -50,9 +47,6 @@ func (s *Service) CreateLab(name, ownerID string, durationMinutes int) (*models.
 	if durationMinutes < MinLabDurationMinutes || durationMinutes > MaxLabDurationMinutes {
 		return nil, ErrInvalidDuration
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	now := time.Now()
 	labID := models.GenerateID()
@@ -69,7 +63,10 @@ func (s *Service) CreateLab(name, ownerID string, durationMinutes int) (*models.
 		UsedServices: []string{}, // Empty for labs created without templates
 	}
 
-	s.labs[lab.ID] = lab
+	// Save lab to database
+	if err := s.repo.CreateLab(lab); err != nil {
+		return nil, fmt.Errorf("failed to create lab in database: %w", err)
+	}
 
 	// Initialize progress tracking
 	s.progressTracker.InitializeProgress(lab.ID)
@@ -96,8 +93,8 @@ func (s *Service) LoadTemplates(dirPath string) error {
 		return err
 	}
 
-	// Enrich templates with service type information
-	s.templateManager.EnrichTemplatesWithServiceTypes(s.serviceConfigManager)
+	// Enrich templates with service type information from database
+	s.templateManager.EnrichTemplatesWithServiceTypes(s.repo)
 
 	// Log what was loaded
 	templates := s.templateManager.GetAllTemplates()
@@ -114,15 +111,19 @@ func (s *Service) LoadTemplates(dirPath string) error {
 // LoadServiceConfigs loads service configurations from a directory
 func (s *Service) LoadServiceConfigs(dirPath string) error {
 	fmt.Printf("Service.LoadServiceConfigs: Loading from %s\n", dirPath)
-	serviceConfigLoader := NewServiceConfigLoader(s.serviceConfigManager)
+	serviceConfigLoader := NewServiceConfigLoader(s.repo)
 	err := serviceConfigLoader.LoadServiceConfigsFromDirectory(dirPath)
 	if err != nil {
 		fmt.Printf("Service.LoadServiceConfigs: Failed to load: %v\n", err)
 		return err
 	}
 
-	// Log what was loaded
-	configs := s.serviceConfigManager.GetAllServiceConfigs()
+	// Log what was loaded from database
+	configs, err := s.repo.GetAllServiceConfigs()
+	if err != nil {
+		fmt.Printf("Service.LoadServiceConfigs: Failed to retrieve configs from database: %v\n", err)
+		return err
+	}
 	fmt.Printf("Service.LoadServiceConfigs: Loaded %d service configurations:\n", len(configs))
 	for _, config := range configs {
 		fmt.Printf("  - %s (ID: %s, Type: %s, Active: %v)\n", config.Name, config.ID, config.Type, config.IsActive)
@@ -133,15 +134,19 @@ func (s *Service) LoadServiceConfigs(dirPath string) error {
 // LoadServiceLimits loads service limits from a directory
 func (s *Service) LoadServiceLimits(dirPath string) error {
 	fmt.Printf("Service.LoadServiceLimits: Loading from %s\n", dirPath)
-	serviceConfigLoader := NewServiceConfigLoader(s.serviceConfigManager)
+	serviceConfigLoader := NewServiceConfigLoader(s.repo)
 	err := serviceConfigLoader.LoadServiceLimitsFromDirectory(dirPath)
 	if err != nil {
 		fmt.Printf("Service.LoadServiceLimits: Failed to load: %v\n", err)
 		return err
 	}
 
-	// Log what was loaded
-	limits := s.serviceConfigManager.GetAllServiceLimits()
+	// Log what was loaded from database
+	limits, err := s.repo.GetAllServiceLimits()
+	if err != nil {
+		fmt.Printf("Service.LoadServiceLimits: Failed to retrieve limits from database: %v\n", err)
+		return err
+	}
 	fmt.Printf("Service.LoadServiceLimits: Loaded %d service limits:\n", len(limits))
 	for _, limit := range limits {
 		fmt.Printf("  - %s (ServiceID: %s, MaxLabs: %d, Active: %v)\n", limit.ID, limit.ServiceID, limit.MaxLabs, limit.IsActive)
@@ -161,7 +166,7 @@ func (s *Service) GetTemplate(templateID string) (*models.LabTemplate, bool) {
 
 // EnrichTemplatesWithServiceTypes enriches all templates with service type information
 func (s *Service) EnrichTemplatesWithServiceTypes() {
-	s.templateManager.EnrichTemplatesWithServiceTypes(s.serviceConfigManager)
+	s.templateManager.EnrichTemplatesWithServiceTypes(s.repo)
 }
 
 // CreateLabFromTemplate creates a lab from a template
@@ -185,7 +190,7 @@ func (s *Service) CreateLabFromTemplate(templateID, ownerID string) (*models.Lab
 		fmt.Printf("CreateLabFromTemplate: Service %s current usage: %d\n", serviceRef.ServiceID, currentUsage)
 
 		// Check if service is available and within limits
-		if err := s.serviceConfigManager.CheckServiceAvailability(serviceRef.ServiceID, currentUsage); err != nil {
+		if err := s.checkServiceAvailability(serviceRef.ServiceID, currentUsage); err != nil {
 			fmt.Printf("CreateLabFromTemplate: Service %s availability check failed: %v\n", serviceRef.ServiceID, err)
 			return nil, fmt.Errorf("service %s (%s) not available: %w", serviceRef.Name, serviceRef.ServiceID, err)
 		}
@@ -200,9 +205,7 @@ func (s *Service) CreateLabFromTemplate(templateID, ownerID string) (*models.Lab
 	}
 	fmt.Printf("CreateLabFromTemplate: Lab created with ID %s\n", lab.ID)
 
-	s.mu.Lock()
-	s.labs[lab.ID] = lab
-	s.mu.Unlock()
+	// Lab is already saved to database in CreateLab method
 
 	// Initialize progress tracking
 	s.progressTracker.InitializeProgress(lab.ID)
@@ -250,7 +253,7 @@ func (s *Service) ConvertLabToResponse(lab *models.Lab, authService interface{})
 	// Enrich used services with service config information
 	var enrichedServices []models.ServiceReference
 	for _, serviceID := range lab.UsedServices {
-		if serviceConfig, exists := s.serviceConfigManager.GetServiceConfig(serviceID); exists {
+		if serviceConfig, err := s.repo.GetServiceConfigByID(serviceID); err == nil {
 			enrichedServices = append(enrichedServices, models.ServiceReference{
 				Name:        serviceConfig.Name,
 				ServiceID:   serviceConfig.ID,
@@ -278,8 +281,14 @@ func (s *Service) getServiceUsage(serviceID string) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	// Get all active labs from database
+	labs, err := s.repo.GetAllLabs()
+	if err != nil {
+		return 0
+	}
+
 	count := 0
-	for _, lab := range s.labs {
+	for _, lab := range labs {
 		if lab.Status == models.LabStatusReady || lab.Status == models.LabStatusProvisioning {
 			// Check if this lab uses the specified service
 			for _, usedService := range lab.UsedServices {
@@ -293,23 +302,72 @@ func (s *Service) getServiceUsage(serviceID string) int {
 	return count
 }
 
+// checkServiceAvailability checks if a service is available and within limits
+func (s *Service) checkServiceAvailability(serviceID string, currentUsage int) error {
+	fmt.Printf("CheckServiceAvailability: Checking service %s with current usage %d\n", serviceID, currentUsage)
+
+	// Check if service config exists and is active
+	config, err := s.repo.GetServiceConfigByID(serviceID)
+	if err != nil {
+		fmt.Printf("CheckServiceAvailability: Service config not found for %s\n", serviceID)
+		return errors.New("service configuration not found")
+	}
+	fmt.Printf("CheckServiceAvailability: Found service config %s (active: %v)\n", config.Name, config.IsActive)
+
+	if !config.IsActive {
+		fmt.Printf("CheckServiceAvailability: Service config %s is not active\n", serviceID)
+		return errors.New("service configuration is not active")
+	}
+
+	// Check if limit exists and is active
+	limit, err := s.repo.GetServiceLimitByServiceID(serviceID)
+	if err != nil {
+		fmt.Printf("CheckServiceAvailability: Service limit not found for %s\n", serviceID)
+		return errors.New("service limit not found")
+	}
+	fmt.Printf("CheckServiceAvailability: Found service limit for %s (active: %v, max_labs: %d)\n", serviceID, limit.IsActive, limit.MaxLabs)
+
+	if !limit.IsActive {
+		fmt.Printf("CheckServiceAvailability: Service limit %s is not active\n", serviceID)
+		return errors.New("service limit is not active")
+	}
+
+	// Check if current usage is within limits
+	if currentUsage >= limit.MaxLabs {
+		fmt.Printf("CheckServiceAvailability: Service %s limit exceeded (usage: %d, limit: %d)\n", serviceID, currentUsage, limit.MaxLabs)
+		return errors.New("service limit exceeded")
+	}
+
+	fmt.Printf("CheckServiceAvailability: Service %s availability check passed (usage: %d, limit: %d)\n", serviceID, currentUsage, limit.MaxLabs)
+	return nil
+}
+
 // GetServiceUsage returns usage information for all services
 func (s *Service) GetServiceUsage() []*models.ServiceUsage {
 	usage := make([]*models.ServiceUsage, 0)
 
-	// Get all service configs
-	configs := s.serviceConfigManager.GetAllServiceConfigs()
+	// Get all service configs from database
+	configs, err := s.repo.GetAllServiceConfigs()
+	if err != nil {
+		return usage
+	}
 
 	for _, config := range configs {
 		currentUsage := s.getServiceUsage(config.ID)
-		usageInfo := s.serviceConfigManager.GetServiceUsage(config.ID, currentUsage)
+
+		// Get service limit
+		limit, err := s.repo.GetServiceLimitByServiceID(config.ID)
+		if err != nil {
+			continue
+		}
+
+		usageInfo := &models.ServiceUsage{
+			ServiceID:  config.ID,
+			ActiveLabs: currentUsage,
+			Limit:      limit.MaxLabs,
+		}
 		usage = append(usage, usageInfo)
 	}
 
 	return usage
-}
-
-// GetServiceConfigManager returns the service configuration manager
-func (s *Service) GetServiceConfigManager() *models.ServiceConfigManager {
-	return s.serviceConfigManager
 }
