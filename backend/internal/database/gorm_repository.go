@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"time"
 
 	"github.com/wcrum/labby/internal/models"
@@ -249,6 +250,26 @@ func (r *Repository) DeleteServiceConfig(id string) error {
 	return r.db.Delete(&models.ServiceConfig{}, "id = ?", id).Error
 }
 
+// UpsertServiceConfig creates or updates a service config in the database
+func (r *Repository) UpsertServiceConfig(config *models.ServiceConfig) error {
+	// Try to find existing config
+	var existing models.ServiceConfig
+	err := r.db.First(&existing, "id = ?", config.ID).Error
+
+	if err != nil {
+		// If not found, create new one
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return r.db.Create(config).Error
+		}
+		// If other error, return it
+		return err
+	}
+
+	// If found, update it
+	config.CreatedAt = existing.CreatedAt // Preserve original creation time
+	return r.db.Save(config).Error
+}
+
 // ServiceLimitRepository methods
 
 // CreateServiceLimit creates a new service limit in the database
@@ -291,4 +312,24 @@ func (r *Repository) UpdateServiceLimit(limit *models.ServiceLimit) error {
 // DeleteServiceLimit deletes a service limit by ID
 func (r *Repository) DeleteServiceLimit(id string) error {
 	return r.db.Delete(&models.ServiceLimit{}, "id = ?", id).Error
+}
+
+// UpsertServiceLimit creates or updates a service limit in the database
+func (r *Repository) UpsertServiceLimit(limit *models.ServiceLimit) error {
+	// Try to find existing limit
+	var existing models.ServiceLimit
+	err := r.db.First(&existing, "id = ?", limit.ID).Error
+
+	if err != nil {
+		// If not found, create new one
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return r.db.Create(limit).Error
+		}
+		// If other error, return it
+		return err
+	}
+
+	// If found, update it
+	limit.CreatedAt = existing.CreatedAt // Preserve original creation time
+	return r.db.Save(limit).Error
 }

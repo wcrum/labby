@@ -1,11 +1,110 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// StringMap represents a map[string]string that can be stored as JSONB
+type StringMap map[string]string
+
+// Value implements the driver.Valuer interface
+func (sm StringMap) Value() (driver.Value, error) {
+	if sm == nil {
+		return "{}", nil
+	}
+	return json.Marshal(sm)
+}
+
+// Scan implements the sql.Scanner interface
+func (sm *StringMap) Scan(value interface{}) error {
+	if value == nil {
+		*sm = make(StringMap)
+		return nil
+	}
+
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan %T into StringMap", value)
+	}
+
+	return json.Unmarshal(bytes, sm)
+}
+
+// StringArray represents a []string that can be stored as PostgreSQL text[]
+type StringArray []string
+
+// Value implements the driver.Valuer interface for PostgreSQL arrays
+func (sa StringArray) Value() (driver.Value, error) {
+	if len(sa) == 0 {
+		return "{}", nil
+	}
+
+	// Format as PostgreSQL array literal: {"item1","item2","item3"}
+	quoted := make([]string, len(sa))
+	for i, s := range sa {
+		// Escape quotes and backslashes in strings
+		escaped := strings.ReplaceAll(s, "\\", "\\\\")
+		escaped = strings.ReplaceAll(escaped, "\"", "\\\"")
+		quoted[i] = fmt.Sprintf("\"%s\"", escaped)
+	}
+	return fmt.Sprintf("{%s}", strings.Join(quoted, ",")), nil
+}
+
+// Scan implements the sql.Scanner interface for PostgreSQL arrays
+func (sa *StringArray) Scan(value interface{}) error {
+	if value == nil {
+		*sa = make(StringArray, 0)
+		return nil
+	}
+
+	var str string
+	switch v := value.(type) {
+	case []byte:
+		str = string(v)
+	case string:
+		str = v
+	default:
+		return fmt.Errorf("cannot scan %T into StringArray", value)
+	}
+
+	// Handle empty array
+	if str == "{}" {
+		*sa = make(StringArray, 0)
+		return nil
+	}
+
+	// Remove curly braces and split by comma
+	str = strings.Trim(str, "{}")
+	if str == "" {
+		*sa = make(StringArray, 0)
+		return nil
+	}
+
+	// Split by comma and unquote each element
+	parts := strings.Split(str, ",")
+	result := make(StringArray, len(parts))
+	for i, part := range parts {
+		// Remove quotes and unescape
+		part = strings.Trim(part, "\"")
+		part = strings.ReplaceAll(part, "\\\"", "\"")
+		part = strings.ReplaceAll(part, "\\\\", "\\")
+		result[i] = part
+	}
+
+	*sa = result
+	return nil
+}
 
 // UserRole represents the role of a user
 type UserRole string
@@ -38,23 +137,23 @@ const (
 
 // Lab represents a lab session
 type Lab struct {
-	ID           string            `json:"id" gorm:"primaryKey;size:8"`
-	Name         string            `json:"name" gorm:"not null"`
-	Status       LabStatus         `json:"status" gorm:"not null;default:'provisioning'"`
-	OwnerID      string            `json:"owner_id" gorm:"not null;size:8"`
-	StartedAt    time.Time         `json:"started_at" gorm:"not null"`
-	EndsAt       time.Time         `json:"ends_at" gorm:"not null"`
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
-	Credentials  []Credential      `json:"credentials" gorm:"foreignKey:LabID;constraint:OnDelete:CASCADE"`
-	ServiceData  map[string]string `json:"service_data,omitempty" gorm:"type:jsonb"`   // Store service-specific data for cleanup
-	TemplateID   string            `json:"template_id,omitempty" gorm:"size:255"`      // Reference to the template used
-	UsedServices []string          `json:"used_services,omitempty" gorm:"type:text[]"` // Track which services were used for this lab
+	ID           string       `json:"id" gorm:"primaryKey;size:8"`
+	Name         string       `json:"name" gorm:"not null"`
+	Status       LabStatus    `json:"status" gorm:"not null;default:'provisioning'"`
+	OwnerID      string       `json:"owner_id" gorm:"not null;size:8"`
+	StartedAt    time.Time    `json:"started_at" gorm:"not null"`
+	EndsAt       time.Time    `json:"ends_at" gorm:"not null"`
+	CreatedAt    time.Time    `json:"created_at"`
+	UpdatedAt    time.Time    `json:"updated_at"`
+	Credentials  []Credential `json:"credentials" gorm:"foreignKey:LabID;constraint:OnDelete:CASCADE"`
+	ServiceData  StringMap    `json:"service_data,omitempty" gorm:"type:jsonb"`   // Store service-specific data for cleanup
+	TemplateID   string       `json:"template_id,omitempty" gorm:"size:255"`      // Reference to the template used
+	UsedServices StringArray  `json:"used_services,omitempty" gorm:"type:text[]"` // Track which services were used for this lab
 }
 
 // Credential represents access credentials for a lab service
 type Credential struct {
-	ID        string    `json:"id" gorm:"primaryKey;size:8"`
+	ID        string    `json:"id" gorm:"primaryKey;size:255"`
 	LabID     string    `json:"lab_id" gorm:"not null;size:8;index"`
 	Label     string    `json:"label" gorm:"not null"`
 	Username  string    `json:"username" gorm:"not null"`
@@ -127,13 +226,13 @@ func GetRemainingTime(expiresAt time.Time) time.Duration {
 	if IsExpired(expiresAt) {
 		return 0
 	}
-	return expiresAt.Sub(time.Now())
+	return time.Until(expiresAt)
 }
 
 // ServiceLimit represents a limit for a specific service
 type ServiceLimit struct {
 	ID          string    `json:"id" yaml:"id" gorm:"primaryKey"`
-	ServiceID   string    `json:"service_id" yaml:"service_id" gorm:"not null;size:20;index"`   // Reference to ServiceConfig
+	ServiceID   string    `json:"service_id" yaml:"service_id" gorm:"not null;index"`           // Reference to ServiceConfig
 	MaxLabs     int       `json:"max_labs" yaml:"max_labs" gorm:"not null;default:10"`          // Maximum number of concurrent labs using this service
 	MaxDuration int       `json:"max_duration" yaml:"max_duration" gorm:"not null;default:480"` // Maximum duration in minutes
 	IsActive    bool      `json:"is_active" yaml:"is_active" gorm:"not null;default:true"`      // Whether this limit is currently active
@@ -143,15 +242,15 @@ type ServiceLimit struct {
 
 // ServiceConfig represents a preconfigured service configuration
 type ServiceConfig struct {
-	ID          string            `json:"id" yaml:"id" gorm:"primaryKey"`
-	Name        string            `json:"name" yaml:"name" gorm:"not null"`
-	Type        string            `json:"type" yaml:"type" gorm:"not null;index"` // palette_project, palette_tenant, proxmox_user
-	Description string            `json:"description" yaml:"description"`
-	Logo        string            `json:"logo" yaml:"logo"`                                              // Path to logo file (SVG/PNG)
-	Config      map[string]string `json:"config" yaml:"config" gorm:"type:jsonb;not null;default:'{}'"`  // Service-specific configuration
-	IsActive    bool              `json:"is_active" yaml:"is_active" gorm:"not null;default:true;index"` // Whether this service config is available
-	CreatedAt   time.Time         `json:"created_at" yaml:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at" yaml:"updated_at"`
+	ID          string    `json:"id" yaml:"id" gorm:"primaryKey"`
+	Name        string    `json:"name" yaml:"name" gorm:"not null"`
+	Type        string    `json:"type" yaml:"type" gorm:"not null;index"` // palette_project, palette_tenant, proxmox_user
+	Description string    `json:"description" yaml:"description"`
+	Logo        string    `json:"logo" yaml:"logo"`                                              // Path to logo file (SVG/PNG)
+	Config      StringMap `json:"config" yaml:"config" gorm:"type:jsonb;not null;default:'{}'"`  // Service-specific configuration
+	IsActive    bool      `json:"is_active" yaml:"is_active" gorm:"not null;default:true;index"` // Whether this service config is available
+	CreatedAt   time.Time `json:"created_at" yaml:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" yaml:"updated_at"`
 }
 
 // ServiceUsage represents current usage of a service

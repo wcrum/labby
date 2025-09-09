@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 )
 
 // TerraformCloudService handles setup and cleanup for Terraform Cloud workspaces
@@ -76,14 +76,10 @@ func (v *TerraformCloudService) generateUniqueVlanTag(min, max int) string {
 
 	// For now, find the first available tag by clearing old entries
 	// This is a simple approach - in production, you'd want proper cleanup
-	for vlanTag := min; vlanTag <= max; vlanTag++ {
-		usedVlanTags[vlanTag] = true
-		fmt.Printf("Reusing VLAN tag: %d (range: %d-%d)\n", vlanTag, min, max)
-		return fmt.Sprintf("%d", vlanTag)
-	}
-
-	// Fallback to min value if all else fails
-	return fmt.Sprintf("%d", min)
+	vlanTag := min
+	usedVlanTags[vlanTag] = true
+	fmt.Printf("Reusing VLAN tag: %d (range: %d-%d)\n", vlanTag, min, max)
+	return fmt.Sprintf("%d", vlanTag)
 }
 
 // processTemplateString processes template strings like "${unique_integer(3100,3149)}" and "${lab_uuid}"
@@ -127,9 +123,15 @@ func (v *TerraformCloudService) processTemplateString(value string, labID string
 
 // ConfigureFromServiceConfig configures the service from a service configuration
 func (v *TerraformCloudService) ConfigureFromServiceConfig(config map[string]string, labID string) {
+	// Debug logging
+	fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: Received config with %d keys: %v\n", len(config), config)
+
 	// Set basic configuration
 	if host, ok := config["host"]; ok {
 		v.host = host
+		fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: Set host to: %s\n", host)
+	} else {
+		fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: WARNING - host key not found in config\n")
 	}
 	if apiToken, ok := config["api_token"]; ok {
 		v.apiToken = apiToken
@@ -316,7 +318,7 @@ func (v *TerraformCloudService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	// Store workspace ID in lab data
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["terraform_cloud_workspace_id"] = workspaceID
 	}
@@ -393,7 +395,7 @@ func (v *TerraformCloudService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	workspaceURL := fmt.Sprintf("%s/app/%s/workspaces/%s", v.host, v.organization, workspaceID)
 
 	credential := &interfaces.Credential{
-		ID:        uuid.New().String(),
+		ID:        fmt.Sprintf("terraform-cloud-%s", shortID),
 		LabID:     ctx.LabID,
 		Label:     "Terraform Cloud Workspace",
 		Username:  "API Token",
@@ -416,6 +418,8 @@ func (v *TerraformCloudService) ExecuteSetup(ctx *interfaces.SetupContext) error
 // ExecuteCleanup cleans up Terraform Cloud workspace
 func (v *TerraformCloudService) ExecuteCleanup(ctx *interfaces.CleanupContext) error {
 	fmt.Printf("Cleaning up Terraform Cloud workspace for lab %s...\n", ctx.LabID)
+	fmt.Printf("TerraformCloudService.ExecuteCleanup: host='%s', organization='%s', apiToken='%s'\n",
+		v.host, v.organization, v.apiToken)
 
 	// Get workspace ID from lab data
 	var workspaceID string
@@ -470,10 +474,16 @@ func (v *TerraformCloudService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 		// Continue with workspace deletion even if variable cleanup fails
 	}
 
-	// Delete workspace
+	// Delete workspace using safe delete
 	if err := v.deleteWorkspace(workspaceID); err != nil {
-		fmt.Printf("Warning: Failed to delete workspace %s: %v\n", workspaceID, err)
-		return err
+		// If safe delete fails because workspace is managing resources,
+		// log a warning but don't fail the cleanup - this is expected behavior
+		if strings.Contains(err.Error(), "managing resources") {
+			fmt.Printf("Warning: Workspace %s could not be safely deleted because it is managing resources. This is expected if Terraform resources were created.\n", workspaceID)
+		} else {
+			fmt.Printf("Warning: Failed to delete workspace %s: %v\n", workspaceID, err)
+			return err
+		}
 	}
 
 	fmt.Printf("Terraform Cloud workspace cleanup completed for lab %s\n", ctx.LabID)
@@ -563,6 +573,7 @@ func (v *TerraformCloudService) createWorkspace(ctx *interfaces.SetupContext, sh
 // findWorkspaceByName searches for a Terraform Cloud workspace by name
 func (v *TerraformCloudService) findWorkspaceByName(workspaceName string) (string, error) {
 	fmt.Printf("Searching for Terraform Cloud workspace: %s\n", workspaceName)
+	fmt.Printf("TerraformCloudService.findWorkspaceByName: host='%s', organization='%s'\n", v.host, v.organization)
 
 	url := fmt.Sprintf("%s/api/v2/organizations/%s/workspaces?search[name]=%s", v.host, v.organization, workspaceName)
 	req, err := http.NewRequest("GET", url, nil)
@@ -835,25 +846,19 @@ func (v *TerraformCloudService) workspaceExists(workspaceID string) (bool, error
 	return resp.StatusCode == http.StatusOK, nil
 }
 
-// deleteWorkspace deletes a Terraform Cloud workspace using safe deletion first, then force deletion if needed
+// deleteWorkspace deletes a Terraform Cloud workspace using safe deletion only
 func (v *TerraformCloudService) deleteWorkspace(workspaceID string) error {
 	fmt.Printf("Attempting safe deletion of Terraform Cloud workspace: %s\n", workspaceID)
 
-	// First, try safe deletion as recommended by Terraform Cloud API
+	// Use safe deletion as recommended by Terraform Cloud API
 	if err := v.safeDeleteWorkspace(workspaceID); err == nil {
 		fmt.Printf("Successfully deleted workspace %s using safe deletion\n", workspaceID)
 		return nil
 	}
 
-	fmt.Printf("Safe deletion failed, attempting force deletion of workspace: %s\n", workspaceID)
-
-	// If safe deletion fails, fall back to force deletion
-	if err := v.forceDeleteWorkspace(workspaceID); err != nil {
-		return fmt.Errorf("both safe and force deletion failed: %v", err)
-	}
-
-	fmt.Printf("Successfully deleted workspace %s using force deletion\n", workspaceID)
-	return nil
+	// If safe deletion fails, log the reason but don't force delete
+	fmt.Printf("Safe deletion failed for workspace %s - workspace may be managing resources\n", workspaceID)
+	return fmt.Errorf("workspace %s could not be safely deleted - it may be managing resources", workspaceID)
 }
 
 // safeDeleteWorkspace attempts to safely delete a workspace using the safe-delete endpoint
@@ -874,12 +879,25 @@ func (v *TerraformCloudService) safeDeleteWorkspace(workspaceID string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("safe delete failed: %s - %s", resp.Status, string(body))
-	}
+	body, _ := io.ReadAll(resp.Body)
 
-	return nil
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+		// Successfully deleted
+		fmt.Printf("Workspace %s safely deleted (no resources managed)\n", workspaceID)
+		return nil
+	case http.StatusNotFound:
+		// Workspace not found - consider this a success for cleanup purposes
+		fmt.Printf("Workspace %s not found - already deleted or never existed\n", workspaceID)
+		return nil
+	case http.StatusConflict:
+		// Workspace is managing resources - cannot be safely deleted
+		fmt.Printf("Workspace %s cannot be safely deleted - it is managing resources: %s\n", workspaceID, string(body))
+		return fmt.Errorf("workspace is managing resources and cannot be safely deleted")
+	default:
+		// Other errors
+		return fmt.Errorf("safe delete failed with status %s: %s", resp.Status, string(body))
+	}
 }
 
 // forceDeleteWorkspace forces deletion of a workspace using the DELETE endpoint
@@ -1404,7 +1422,7 @@ func (v *TerraformCloudService) LoadTerraformConfiguration(ctx *interfaces.Setup
 
 	// Check if the directory exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("Terraform configuration directory not found: %s", configPath)
+		return nil, fmt.Errorf("terraform configuration directory not found: %s", configPath)
 	}
 
 	configFiles := make(map[string]string)

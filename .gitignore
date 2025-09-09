@@ -45,3 +45,5 @@ backend/.netrc
 backend/main
 backend/server
 /backend/service-configs
+
+terraform/

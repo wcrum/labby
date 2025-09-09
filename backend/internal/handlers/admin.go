@@ -152,7 +152,6 @@ func (h *Handler) GetUsers(c *gin.Context) {
 
 	// Convert users to UserWithOrganization format
 	usersWithOrg := make([]*models.UserWithOrganization, len(users))
-	orgService := services.NewOrganizationService()
 
 	for i, user := range users {
 		userWithOrg := &models.UserWithOrganization{
@@ -166,7 +165,7 @@ func (h *Handler) GetUsers(c *gin.Context) {
 
 		// If user has an organization, fetch organization details
 		if user.OrganizationID != nil {
-			org, err := orgService.GetOrganization(*user.OrganizationID)
+			org, err := h.repo.GetOrganizationByID(*user.OrganizationID)
 			if err == nil {
 				userWithOrg.Organization = org
 			}
@@ -485,10 +484,23 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 	}
 
 	// Configure service with the specific service config
-	if configurableService, ok := service.(interface {
+	// Handle different ConfigureFromServiceConfig signatures
+	switch s := service.(type) {
+	case interface {
 		ConfigureFromServiceConfig(*models.ServiceConfig)
-	}); ok {
-		configurableService.ConfigureFromServiceConfig(serviceConfig)
+	}:
+		// Services that take *models.ServiceConfig (palette_project, palette_tenant)
+		s.ConfigureFromServiceConfig(serviceConfig)
+	case interface {
+		ConfigureFromServiceConfig(map[string]string, string)
+	}:
+		// Services that take (map[string]string, string) (terraform_cloud)
+		s.ConfigureFromServiceConfig(serviceConfig.Config, req.LabID)
+	case interface {
+		ConfigureFromServiceConfig(map[string]string)
+	}:
+		// Services that take map[string]string (guacamole, proxmox_user)
+		s.ConfigureFromServiceConfig(serviceConfig.Config)
 	}
 
 	// Create cleanup context with auto-constructed parameters

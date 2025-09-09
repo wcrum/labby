@@ -60,7 +60,7 @@ func (s *Service) CreateLab(name, ownerID string, durationMinutes int) (*models.
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		Credentials:  []models.Credential{},
-		UsedServices: []string{}, // Empty for labs created without templates
+		UsedServices: models.StringArray{}, // Empty for labs created without templates
 	}
 
 	// Save lab to database
@@ -205,7 +205,12 @@ func (s *Service) CreateLabFromTemplate(templateID, ownerID string) (*models.Lab
 	}
 	fmt.Printf("CreateLabFromTemplate: Lab created with ID %s\n", lab.ID)
 
-	// Lab is already saved to database in CreateLab method
+	// Save lab to database
+	if err := s.repo.CreateLab(lab); err != nil {
+		fmt.Printf("CreateLabFromTemplate: Failed to save lab to database: %v\n", err)
+		return nil, fmt.Errorf("failed to create lab in database: %w", err)
+	}
+	fmt.Printf("CreateLabFromTemplate: Lab saved to database successfully\n")
 
 	// Initialize progress tracking
 	s.progressTracker.InitializeProgress(lab.ID)

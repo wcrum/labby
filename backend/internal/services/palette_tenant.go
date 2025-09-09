@@ -287,7 +287,7 @@ func (v *PaletteTenantService) ExecuteSetup(ctx *interfaces.SetupContext) error 
 	// Store in lab's ServiceData for persistence
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["palette_tenant_id"] = tenantID
 		// Store tenant spec data as JSON string

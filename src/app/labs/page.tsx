@@ -25,6 +25,8 @@ export default function LabsPage() {
     try {
       setLoading(true);
       const data = await apiService.getTemplates();
+      console.log('Loaded templates:', data);
+      console.log('Template IDs:', data.map(t => ({ id: t.id, name: t.name })));
       setTemplates(data);
     } catch (err) {
       setError('Failed to load lab templates');
@@ -36,6 +38,7 @@ export default function LabsPage() {
 
   const handleCreateLab = async (templateId: string) => {
     try {
+      console.log('Creating lab with template ID:', templateId);
       setCreatingLab(templateId);
       const lab = await apiService.createLabFromTemplate(templateId);
       router.push(`/lab?id=${lab.id}`);
@@ -159,7 +162,11 @@ export default function LabsPage() {
 
                 {/* Action Button */}
                 <Button
-                  onClick={() => handleCreateLab(template.id)}
+                  onClick={() => {
+                    console.log('Button clicked for template:', template);
+                    console.log('Template ID being passed:', template.id);
+                    handleCreateLab(template.id);
+                  }}
                   disabled={creatingLab === template.id}
                   className="w-full"
                 >

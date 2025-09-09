@@ -35,7 +35,7 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -49,6 +49,12 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -71,6 +77,24 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 		lab.UpdatedAt = time.Now()
 		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Palette Project service setup completed successfully")
@@ -100,7 +124,7 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -114,6 +138,12 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -136,6 +166,24 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 		lab.UpdatedAt = time.Now()
 		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Proxmox user created successfully")
@@ -210,7 +258,7 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -224,6 +272,12 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -246,6 +300,24 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 		lab.UpdatedAt = time.Now()
 		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Palette Tenant service setup completed successfully")
@@ -272,7 +344,7 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -286,6 +358,12 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -316,6 +394,24 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 		return
 	}
 
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
+	}
+
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup completed for lab %s", lab.Name))
 }
 
@@ -343,7 +439,7 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -357,6 +453,12 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -379,6 +481,24 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 		lab.UpdatedAt = time.Now()
 		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Guacamole user created successfully")

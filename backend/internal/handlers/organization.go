@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wcrum/labby/internal/models"
@@ -39,12 +40,16 @@ func (h *Handler) CreateOrganization(c *gin.Context) {
 	description := req["description"]
 	domain := req["domain"]
 
-	// For now, we'll use a mock organization service
-	// In a real implementation, this would be injected into the handler
-	orgService := services.NewOrganizationService()
+	// Create organization using database repository
+	org := &models.Organization{
+		Name:        name,
+		Description: description,
+		Domain:      domain,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
 
-	org, err := orgService.CreateOrganization(name, description, domain)
-	if err != nil {
+	if err := h.repo.CreateOrganization(org); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create organization"})
 		return
 	}
@@ -63,8 +68,11 @@ func (h *Handler) CreateOrganization(c *gin.Context) {
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Router /admin/organizations [get]
 func (h *Handler) GetOrganizations(c *gin.Context) {
-	orgService := services.NewOrganizationService()
-	orgs := orgService.GetAllOrganizations()
+	orgs, err := h.repo.GetAllOrganizations()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve organizations"})
+		return
+	}
 	c.JSON(http.StatusOK, orgs)
 }
 
@@ -75,7 +83,7 @@ func (h *Handler) GetOrganizations(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path string true "Organization ID"
-// @Success 200 {object} models.OrganizationWithMembers
+// @Success 200 {object} models.Organization
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Organization not found"
@@ -87,14 +95,13 @@ func (h *Handler) GetOrganization(c *gin.Context) {
 		return
 	}
 
-	orgService := services.NewOrganizationService()
-	orgWithMembers, err := orgService.GetOrganizationWithMembers(orgID)
+	org, err := h.repo.GetOrganizationByID(orgID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Organization not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, orgWithMembers)
+	c.JSON(http.StatusOK, org)
 }
 
 // CreateInvite handles creating an invitation to join an organization (admin only)
@@ -140,12 +147,19 @@ func (h *Handler) CreateInvite(c *gin.Context) {
 	userObj := user.(*models.User)
 	fmt.Printf("DEBUG: User from context: %+v\n", userObj)
 
-	orgService := services.NewOrganizationService()
-	fmt.Printf("DEBUG: Created new OrganizationService instance\n")
+	// Create invite using database repository
+	invite := &models.Invite{
+		OrganizationID: orgID,
+		Email:          req.Email,
+		InvitedBy:      userObj.ID,
+		Role:           req.Role,
+		Status:         "pending",
+		ExpiresAt:      time.Now().Add(7 * 24 * time.Hour), // 7 days
+		CreatedAt:      time.Now(),
+	}
 
-	invite, err := orgService.CreateInvite(orgID, req.Email, req.Role, userObj.ID)
-	if err != nil {
-		fmt.Printf("DEBUG: CreateInvite service error: %v\n", err)
+	if err := h.repo.CreateInvite(invite); err != nil {
+		fmt.Printf("DEBUG: CreateInvite database error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create invite"})
 		return
 	}
@@ -173,14 +187,18 @@ func (h *Handler) GetInvite(c *gin.Context) {
 		return
 	}
 
-	orgService := services.NewOrganizationService()
-	fmt.Printf("DEBUG: Created new OrganizationService instance\n")
-
-	invite, err := orgService.GetInvite(inviteID)
+	invite, err := h.repo.GetInviteByID(inviteID)
 	if err != nil {
-		fmt.Printf("DEBUG: GetInvite service error: %v\n", err)
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		fmt.Printf("DEBUG: GetInvite database error: %v\n", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "Invite not found"})
 		return
+	}
+
+	// Check if invite has expired
+	if time.Now().After(invite.ExpiresAt) {
+		invite.Status = "expired"
+		// Update the invite status in the database
+		h.repo.UpdateInvite(invite)
 	}
 
 	fmt.Printf("DEBUG: Successfully retrieved invite: %+v\n", invite)

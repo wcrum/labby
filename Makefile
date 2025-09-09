@@ -87,6 +87,19 @@ up: ## Start with docker-compose
 down: ## Stop docker-compose
 	docker-compose down
 
+# Database targets
+.PHONY: db-up
+db-up: ## Start database with docker-compose
+	@echo "Starting database..."
+	cd $(BACKEND_DIR) && docker-compose -f docker-compose.db.yml up -d
+	@echo "Database started successfully!"
+
+.PHONY: db-down
+db-down: ## Stop database and delete volumes
+	@echo "Stopping database and deleting volumes..."
+	cd $(BACKEND_DIR) && docker-compose -f docker-compose.db.yml down -v
+	@echo "Database stopped and volumes deleted!"
+
 # Health check
 .PHONY: health
 health: ## Check application health

@@ -5,6 +5,7 @@ import (
 
 	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 )
 
 // ServiceManager manages all available services
@@ -96,6 +97,16 @@ func (sm *ServiceManager) CleanupLabServices(ctx *interfaces.CleanupContext) err
 
 	fmt.Printf("Starting cleanup for lab %s (ID: %s)\n", ctx.Lab.Name, ctx.LabID)
 	fmt.Printf("Lab used services: %v\n", ctx.Lab.UsedServices)
+	fmt.Printf("Lab ServiceData keys: %v\n", func() []string {
+		if ctx.Lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(ctx.Lab.ServiceData))
+		for k := range ctx.Lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
 
 	// If no used services are tracked, clean up all services (backward compatibility)
 	if len(ctx.Lab.UsedServices) == 0 {
@@ -120,6 +131,44 @@ func (sm *ServiceManager) CleanupLabServices(ctx *interfaces.CleanupContext) err
 			// Log warning but continue with other services
 			fmt.Printf("Warning: Service for config ID %s not found during cleanup for lab %s\n", serviceConfigID, ctx.LabID)
 			continue
+		}
+
+		// Get the service config to configure the service before cleanup
+		serviceConfig, err := sm.repo.GetServiceConfigByID(serviceConfigID)
+		if err != nil {
+			fmt.Printf("Warning: Failed to get service config %s for cleanup: %v\n", serviceConfigID, err)
+			continue
+		}
+
+		fmt.Printf("ServiceManager: Retrieved service config %s: ID=%s, Type=%s, Config keys=%d\n",
+			serviceConfigID, serviceConfig.ID, serviceConfig.Type, len(serviceConfig.Config))
+		fmt.Printf("ServiceManager: Config content: %v\n", serviceConfig.Config)
+
+		// Configure the service with its service config data
+		// Handle different ConfigureFromServiceConfig signatures
+		fmt.Printf("ServiceManager: Configuring service %s (type: %s)\n", service.GetName(), serviceConfig.Type)
+		switch s := service.(type) {
+		case interface {
+			ConfigureFromServiceConfig(*models.ServiceConfig)
+		}:
+			// Services that take *models.ServiceConfig (palette_project, palette_tenant)
+			s.ConfigureFromServiceConfig(serviceConfig)
+			fmt.Printf("Configured service %s with service config data (ServiceConfig)\n", service.GetName())
+		case interface {
+			ConfigureFromServiceConfig(map[string]string, string)
+		}:
+			// Services that take (map[string]string, string) (terraform_cloud)
+			fmt.Printf("ServiceManager: Calling ConfigureFromServiceConfig for terraform_cloud with %d config keys\n", len(serviceConfig.Config))
+			s.ConfigureFromServiceConfig(serviceConfig.Config, ctx.LabID)
+			fmt.Printf("Configured service %s with service config data (Config + LabID)\n", service.GetName())
+		case interface {
+			ConfigureFromServiceConfig(map[string]string)
+		}:
+			// Services that take map[string]string (guacamole, proxmox_user)
+			s.ConfigureFromServiceConfig(serviceConfig.Config)
+			fmt.Printf("Configured service %s with service config data (Config)\n", service.GetName())
+		default:
+			fmt.Printf("Warning: Service %s does not support ConfigureFromServiceConfig\n", service.GetName())
 		}
 
 		fmt.Printf("Cleaning up service: %s (config ID: %s)\n", service.GetName(), serviceConfigID)

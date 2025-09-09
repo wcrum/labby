@@ -82,8 +82,8 @@ func (scl *ServiceConfigLoader) LoadServiceConfigFromFile(filePath string) error
 		return fmt.Errorf("invalid service config in %s: %w", filePath, err)
 	}
 
-	// Save to database
-	if err := scl.repo.CreateServiceConfig(&serviceConfig); err != nil {
+	// Save to database (upsert)
+	if err := scl.repo.UpsertServiceConfig(&serviceConfig); err != nil {
 		fmt.Printf("ServiceConfigLoader.LoadServiceConfigFromFile: Failed to save service config %s to database: %v\n", serviceConfig.ID, err)
 		return fmt.Errorf("failed to save service config to database: %w", err)
 	}
@@ -180,8 +180,8 @@ func (scl *ServiceConfigLoader) LoadServiceLimitsFromFile(filePath string) error
 			return fmt.Errorf("invalid service limit at index %d: %w", i, err)
 		}
 
-		// Save to database
-		if err := scl.repo.CreateServiceLimit(&limits[i]); err != nil {
+		// Save to database (upsert)
+		if err := scl.repo.UpsertServiceLimit(&limits[i]); err != nil {
 			fmt.Printf("ServiceConfigLoader.LoadServiceLimitsFromFile: Failed to save service limit for %s to database: %v\n", limits[i].ServiceID, err)
 			return fmt.Errorf("failed to save service limit to database: %w", err)
 		}

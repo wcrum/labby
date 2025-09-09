@@ -1,29 +1,29 @@
-- id: "pal-proj"
+- id: "palette-project-limit"
   service_id: "palette-project"
   max_labs: 10
   max_duration: 480
 
-- id: "pal-ten"
+- id: "palette-tenant-limit"
   service_id: "palette-tenant"
   max_labs: 5
   max_duration: 480
 
-- id: "prox-user"
+- id: "proxmox-user-limit"
   service_id: "proxmox-user"
   max_labs: 8
   max_duration: 480
 
-- id: "tf-cloud"
+- id: "terraform-cloud-limit"
   service_id: "terraform-cloud"
   max_labs: 5
   max_duration: 480
 
-- id: "guac-1"
+- id: "guacamole-limit"
   service_id: "guacamole"
   max_labs: 5
   max_duration: 480
 
-- id: "fail-proj"
+- id: "palette-project-failing-limit"
   service_id: "palette-project-failing"
   max_labs: 999
   max_duration: 480

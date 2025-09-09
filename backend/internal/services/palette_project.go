@@ -10,7 +10,6 @@ import (
 	"github.com/wcrum/labby/internal/models"
 
 	"github.com/go-openapi/strfmt"
-	"github.com/google/uuid"
 	"github.com/sethvargo/go-password/password"
 	"github.com/spectrocloud/palette-sdk-go/api/client/version1"
 	palettemodels "github.com/spectrocloud/palette-sdk-go/api/models"
@@ -341,7 +340,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	// Also store data in lab's ServiceData for persistent access during cleanup
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["palette_project_sandbox_id"] = shortID
 		ctx.Lab.ServiceData["palette_project_id"] = projectID
@@ -353,7 +352,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 
 	// Add credentials to the lab
 	credential := &interfaces.Credential{
-		ID:        uuid.New().String(),
+		ID:        fmt.Sprintf("palette-project-%s", shortID),
 		LabID:     ctx.LabID,
 		Label:     "Palette Project",
 		Username:  userEntity.Spec.EmailID,

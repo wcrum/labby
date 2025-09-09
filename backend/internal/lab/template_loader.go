@@ -148,7 +148,7 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 	now := time.Now()
 
 	// Extract service IDs from template for tracking
-	usedServices := make([]string, 0, len(template.Services))
+	usedServices := make(models.StringArray, 0, len(template.Services))
 	for _, service := range template.Services {
 		fmt.Printf("TemplateLoader.CreateLabFromTemplate: Adding service %s (ID: %s) to used services\n", service.Name, service.ServiceID)
 		usedServices = append(usedServices, service.ServiceID)

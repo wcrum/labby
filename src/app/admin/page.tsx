@@ -68,22 +68,8 @@ function AdminPageContent() {
     if (!selectedLab) return;
 
     try {
-      // Stop the lab first
+      // Stop the lab - this will automatically cleanup all resources and mark as expired
       await apiService.adminStopLab(selectedLab.id);
-      
-      // Then cleanup any remaining resources
-      try {
-        await apiService.cleanupLab(selectedLab.id);
-      } catch (cleanupError) {
-        console.warn('Cleanup failed (lab may already be cleaned up):', cleanupError);
-      }
-      
-      // Finally delete the lab record
-      try {
-        await apiService.adminDeleteLab(selectedLab.id);
-      } catch (deleteError) {
-        console.warn('Delete failed (lab may already be deleted):', deleteError);
-      }
       
       // Refresh the labs list
       const data = await fetchAllLabSessions();
@@ -493,7 +479,7 @@ function AdminPageContent() {
           <AlertDialogHeader>
             <AlertDialogTitle>Stop Lab</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to stop lab &quot;{selectedLab?.name}&quot;? This will delete all resources and cannot be undone.
+              Are you sure you want to stop lab &quot;{selectedLab?.name}&quot;? This will cleanup all resources (Terraform workspaces, Palette projects, Proxmox users, Guacamole users, etc.) and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

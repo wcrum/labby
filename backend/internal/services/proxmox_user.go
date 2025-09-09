@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 
 	"github.com/sethvargo/go-password/password"
 )
@@ -401,7 +402,7 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 	// Store in lab's ServiceData for persistence
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["proxmox_user_username"] = labUsername
 		ctx.Lab.ServiceData["proxmox_user_password"] = labPassword
