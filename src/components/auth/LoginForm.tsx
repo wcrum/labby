@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, Mail, Shield } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 
@@ -23,7 +23,7 @@ export function LoginForm() {
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const { login, isLoading } = useAuth();
+  const { login, oidcLogin, isLoading } = useAuth();
   const { resolvedTheme } = useTheme();
   const searchParams = useSearchParams();
   const inviteCode = searchParams.get('code');
@@ -43,6 +43,10 @@ export function LoginForm() {
       setError("Login failed. Please try again.");
       setShowErrorDialog(true);
     }
+  };
+
+  const handleOIDCLogin = () => {
+    oidcLogin(inviteCode || undefined);
   };
 
   return (
@@ -105,9 +109,33 @@ export function LoginForm() {
             </Button>
           </form>
 
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+            
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full mt-4"
+              onClick={handleOIDCLogin}
+              disabled={isLoading}
+            >
+              <img src="/dex-icon-color.svg" alt="Dex" className="mr-2 h-4 w-4" />
+              Dex Login
+            </Button>
+          </div>
+
           <div className="mt-6 text-center text-sm text-muted-foreground">
             <p>No password required - just enter your email to get started</p>
-
+            <p className="mt-1">Or use Dex authentication for organization-based access</p>
           </div>
         </CardContent>
       </Card>

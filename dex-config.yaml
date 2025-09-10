@@ -1,0 +1,70 @@
+issuer: http://localhost:5556/dex
+storage:
+  type: memory
+
+# Web configuration
+web:
+  http: 0.0.0.0:5556
+  allowedOrigins: ["http://localhost:8080", "http://127.0.0.1:8080", "https://tunnel.wcrum.dev"]
+
+# Enable local users
+enablePasswordDB: true
+
+# Allow password grants with local users
+oauth2:
+  passwordConnector: local
+
+# Setup clients
+staticClients:
+  - id: spectro-lab-client
+    secret: spectro-lab-secret
+    name: 'Spectro Lab Application'
+    redirectURIs:
+      - 'http://localhost:8080/auth/callback'
+      - 'http://127.0.0.1:8080/auth/callback'
+      - 'https://tunnel.wcrum.dev/auth/callback'
+    trustedPeers:
+      - spectro-lab-client
+
+# OIDC connectors
+connectors:
+  - type: oidc
+    id: okta
+    name: Okta
+    config:
+      issuer: https://trial-7452475.okta.com
+      clientID: 0oavabn0mhXggyJ7G697
+      clientSecret: jLiruon2bcNhFysKmHd5uSFBbnDKYmekMs1jjNa1jybUw7b0blQUKrVkiL16Ld5a
+      redirectURI: http://localhost:5556/dex/callback
+      scopes:
+        - openid
+        - profile
+        - email
+        - groups
+      claimMapping:
+        preferred_username: email
+        email: email
+        name: name
+        groups: groups
+        email_verified: email_verified
+      # Handle missing email_verified claim by setting it to true
+      # This is needed because Okta may not always provide this claim
+      insecureSkipEmailVerified: true
+      insecureEnableGroups: true
+      getUserInfo: true
+
+# Set up test users with organization groups
+staticPasswords:
+  - email: "admin@spectrocloud.com"
+    hash: "$2y$10$uWgPRB63q8JJkwSPzROS/.8RO7wPpm9CHlK24yKPKB.sjmL28QKqG" # password 
+    username: "admin"
+    userID: "admin-user-id"
+    groups:
+      - "admin"
+      - "spectrocloud"
+  - email: "test@test.com"
+    hash: "$2y$10$uWgPRB63q8JJkwSPzROS/.8RO7wPpm9CHlK24yKPKB.sjmL28QKqG" # password
+    username: "test"
+    userID: "test-id"
+    groups:
+      - "example-org"

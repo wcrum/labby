@@ -1,0 +1,16 @@
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.44.0
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./dex-config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    environment:
+      - DEX_OVERWRITE_INTEGRATION_TEST_CONFIG=true
+    networks:
+      - dex-network
+
+networks:
+  dex-network:
+    driver: bridge
