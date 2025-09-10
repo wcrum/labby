@@ -220,6 +220,66 @@ func (r *Repository) GetInvitesByEmail(email string) ([]*models.Invite, error) {
 	return invites, err
 }
 
+// GetAllInvites retrieves all invites across all organizations (admin function)
+func (r *Repository) GetAllInvites() ([]*models.Invite, error) {
+	var invites []*models.Invite
+	err := r.db.Order("created_at DESC").Find(&invites).Error
+	return invites, err
+}
+
+// GetInviteUsageStats retrieves invite usage statistics with user details
+func (r *Repository) GetInviteUsageStats() ([]*models.InviteUsageStats, error) {
+	var stats []*models.InviteUsageStats
+
+	// This is a complex query that joins invites with organizations and users
+	// For now, let's implement a simpler version and enhance it later
+	rows, err := r.db.Table("invites").
+		Select(`
+			invites.id as invite_id,
+			invites.email,
+			invites.usage_count,
+			invites.usage_limit,
+			invites.last_used_at,
+			invites.status,
+			invites.created_at,
+			invites.expires_at,
+			organizations.name as organization_name
+		`).
+		Joins("LEFT JOIN organizations ON invites.organization_id = organizations.id").
+		Order("invites.created_at DESC").
+		Rows()
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var stat models.InviteUsageStats
+		var orgName string
+
+		err := rows.Scan(
+			&stat.InviteID,
+			&stat.Email,
+			&stat.UsageCount,
+			&stat.UsageLimit,
+			&stat.LastUsedAt,
+			&stat.Status,
+			&stat.CreatedAt,
+			&stat.ExpiresAt,
+			&orgName,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		stat.OrganizationName = orgName
+		stats = append(stats, &stat)
+	}
+
+	return stats, nil
+}
+
 // CreateOrganizationMember creates a new organization member in the database
 func (r *Repository) CreateOrganizationMember(member *models.OrganizationMember) error {
 	return r.db.Create(member).Error

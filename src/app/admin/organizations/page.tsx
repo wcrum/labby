@@ -28,7 +28,8 @@ import {
   Mail, 
   Building2, 
   Calendar,
-  Edit
+  Edit,
+  ExternalLink
 } from "lucide-react";
 import { apiService, Organization } from "@/lib/api";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -45,7 +46,7 @@ function OrganizationsPageContent() {
   const [showCreateInvite, setShowCreateInvite] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [newOrg, setNewOrg] = useState({ name: '', description: '', domain: '' });
-  const [newInvite, setNewInvite] = useState({ email: '', role: 'member' });
+  const [newInvite, setNewInvite] = useState({ email: '', role: 'member', usage_limit: 1 });
   
   // Alert dialog state
   const [showSuccessAlert, setShowSuccessAlert] = useState(false);
@@ -82,7 +83,7 @@ function OrganizationsPageContent() {
   const handleCreateInvite = async () => {
     try {
       const invite = await apiService.createInvite(selectedOrg?.id || 'default', newInvite);
-      setNewInvite({ email: '', role: 'member' });
+      setNewInvite({ email: '', role: 'member', usage_limit: 1 });
       setShowCreateInvite(false);
       
       // Show the invite link in alert dialog
@@ -106,13 +107,20 @@ function OrganizationsPageContent() {
             <h1 className="text-3xl md:text-4xl font-semibold">Organization Management</h1>
             <p className="text-muted-foreground">Manage organizations and their members</p>
           </div>
-          <Dialog open={showCreateOrg} onOpenChange={setShowCreateOrg}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Organization
-              </Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <a href="/admin/invites">
+                <ExternalLink className="h-4 w-4 mr-2" />
+                View All Invites
+              </a>
+            </Button>
+            <Dialog open={showCreateOrg} onOpenChange={setShowCreateOrg}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Organization
+                </Button>
+              </DialogTrigger>
             <DialogContent className="w-full max-w-md">
               <DialogHeader>
                 <DialogTitle>Create Organization</DialogTitle>
@@ -161,6 +169,7 @@ function OrganizationsPageContent() {
                 </div>
             </DialogContent>
           </Dialog>
+          </div>
         </header>
 
         {/* Error Display */}
@@ -246,6 +255,20 @@ function OrganizationsPageContent() {
                               <option value="member">Member</option>
                               <option value="admin">Admin</option>
                             </select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="invite-usage-limit">Usage Limit</Label>
+                            <Input
+                              id="invite-usage-limit"
+                              type="number"
+                              min="1"
+                              value={newInvite.usage_limit}
+                              onChange={(e) => setNewInvite({ ...newInvite, usage_limit: parseInt(e.target.value) || 1 })}
+                              placeholder="1"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Number of times this invite can be used (leave empty for unlimited)
+                            </p>
                           </div>
                         </div>
                         

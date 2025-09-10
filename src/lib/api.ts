@@ -141,6 +141,36 @@ export interface Invite {
   expires_at: string;
   created_at: string;
   accepted_at?: string;
+  usage_limit?: number;
+  usage_count: number;
+  last_used_at?: string;
+  used_by: string[];
+}
+
+export interface CreateInviteRequest {
+  email: string;
+  role: string;
+  usage_limit?: number;
+}
+
+export interface InviteUsageStats {
+  invite_id: string;
+  email: string;
+  organization_name: string;
+  usage_count: number;
+  usage_limit?: number;
+  last_used_at?: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  used_by: UserInfo[];
+}
+
+export interface UserInfo {
+  id: string;
+  email: string;
+  name: string;
+  used_at: string;
 }
 
 class ApiService {
@@ -516,11 +546,26 @@ class ApiService {
     });
   }
 
-  async createInvite(organizationId: string, data: { email: string; role: string }): Promise<Invite> {
+  async createInvite(organizationId: string, data: CreateInviteRequest): Promise<Invite> {
     return this.request<Invite>(`/api/admin/organizations/${organizationId}/invites`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // Get all invites across all organizations (admin)
+  async getAllInvites(): Promise<Invite[]> {
+    return this.request<Invite[]>('/api/admin/invites');
+  }
+
+  // Get invite usage statistics (admin)
+  async getInviteUsageStats(): Promise<InviteUsageStats[]> {
+    return this.request<InviteUsageStats[]>('/api/admin/invites/usage');
+  }
+
+  // Get invites for a specific organization (admin)
+  async getOrganizationInvites(organizationId: string): Promise<Invite[]> {
+    return this.request<Invite[]>(`/api/admin/organizations/${organizationId}/invites`);
   }
 
   // Get user's organization

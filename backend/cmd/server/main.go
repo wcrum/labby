@@ -252,6 +252,11 @@ func main() {
 		admin.POST("/organizations", handler.CreateOrganization)
 		admin.GET("/organizations/:id", handler.GetOrganization)
 		admin.POST("/organizations/:id/invites", handler.CreateInvite)
+		admin.GET("/organizations/:id/invites", handler.GetOrganizationInvites)
+
+		// Invite management
+		admin.GET("/invites", handler.GetAllInvites)
+		admin.GET("/invites/usage", handler.GetInviteUsageStats)
 
 		// Service configuration and limit management
 		admin.GET("/service-configs", handler.GetServiceConfigs)

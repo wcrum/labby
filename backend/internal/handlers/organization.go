@@ -158,20 +158,13 @@ func (h *Handler) CreateInvite(c *gin.Context) {
 	}
 	fmt.Printf("DEBUG: Found organization: %s (ID: %s)\n", org.Name, org.ID)
 
-	// Create invite using database repository
-	invite := &models.Invite{
-		ID:             uuid.New().String()[:8], // Generate 8-character ID
-		OrganizationID: orgID,
-		Email:          req.Email,
-		InvitedBy:      userObj.ID,
-		Role:           req.Role,
-		Status:         "pending",
-		ExpiresAt:      time.Now().Add(7 * 24 * time.Hour), // 7 days
-		CreatedAt:      time.Now(),
-	}
+	// Create invite using organization service
+	orgService := services.NewOrganizationService()
+	orgService.SetRepository(h.repo)
 
-	if err := h.repo.CreateInvite(invite); err != nil {
-		fmt.Printf("DEBUG: CreateInvite database error: %v\n", err)
+	invite, err := orgService.CreateInvite(orgID, req.Email, req.Role, userObj.ID, req.UsageLimit)
+	if err != nil {
+		fmt.Printf("DEBUG: CreateInvite service error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create invite"})
 		return
 	}
@@ -334,4 +327,88 @@ func (h *Handler) GetUserOrganization(c *gin.Context) {
 
 	fmt.Printf("DEBUG: Found organization: %+v\n", organization)
 	c.JSON(http.StatusOK, organization)
+}
+
+// GetAllInvites handles getting all invites across all organizations (admin only)
+// @Summary Get all invites (admin)
+// @Description Get all invites across all organizations (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} models.Invite
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Router /admin/invites [get]
+func (h *Handler) GetAllInvites(c *gin.Context) {
+	orgService := services.NewOrganizationService()
+	orgService.SetRepository(h.repo)
+
+	invites, err := orgService.GetAllInvites()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve invites"})
+		return
+	}
+
+	c.JSON(http.StatusOK, invites)
+}
+
+// GetInviteUsageStats handles getting invite usage statistics (admin only)
+// @Summary Get invite usage statistics (admin)
+// @Description Get usage statistics for all invites (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} models.InviteUsageStats
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Router /admin/invites/usage [get]
+func (h *Handler) GetInviteUsageStats(c *gin.Context) {
+	orgService := services.NewOrganizationService()
+	orgService.SetRepository(h.repo)
+
+	stats, err := orgService.GetInviteUsageStats()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve invite usage statistics"})
+		return
+	}
+
+	c.JSON(http.StatusOK, stats)
+}
+
+// GetOrganizationInvites handles getting all invites for a specific organization (admin only)
+// @Summary Get organization invites (admin)
+// @Description Get all invites for a specific organization (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Organization ID"
+// @Success 200 {array} models.Invite
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 404 {object} map[string]interface{} "Organization not found"
+// @Router /admin/organizations/{id}/invites [get]
+func (h *Handler) GetOrganizationInvites(c *gin.Context) {
+	orgID := c.Param("id")
+	if orgID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Organization ID is required"})
+		return
+	}
+
+	// Verify organization exists
+	_, err := h.repo.GetOrganizationByID(orgID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Organization not found"})
+		return
+	}
+
+	orgService := services.NewOrganizationService()
+	orgService.SetRepository(h.repo)
+
+	invites, err := orgService.GetInvitesByOrganizationID(orgID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve organization invites"})
+		return
+	}
+
+	c.JSON(http.StatusOK, invites)
 }

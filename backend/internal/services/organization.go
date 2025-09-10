@@ -145,17 +145,23 @@ func (s *OrganizationService) GetOrganizationMembers(organizationID string) ([]m
 }
 
 // CreateInvite creates an invitation to join an organization
-func (s *OrganizationService) CreateInvite(organizationID, email, role, invitedBy string) (*models.Invite, error) {
+func (s *OrganizationService) CreateInvite(organizationID, email, role, invitedBy string, usageLimit *int) (*models.Invite, error) {
 	if s.repo == nil {
 		return nil, fmt.Errorf("repository not initialized")
 	}
 
-	fmt.Printf("DEBUG: Creating invite for org: %s, email: %s, role: %s\n", organizationID, email, role)
+	fmt.Printf("DEBUG: Creating invite for org: %s, email: %s, role: %s, usageLimit: %v\n", organizationID, email, role, usageLimit)
 
 	// Check if organization exists
 	_, err := s.repo.GetOrganizationByID(organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("organization not found")
+	}
+
+	// Set default usage limit if not provided
+	if usageLimit == nil {
+		defaultLimit := 1
+		usageLimit = &defaultLimit
 	}
 
 	invite := &models.Invite{
@@ -167,6 +173,9 @@ func (s *OrganizationService) CreateInvite(organizationID, email, role, invitedB
 		Status:         "pending",
 		ExpiresAt:      time.Now().Add(7 * 24 * time.Hour), // 7 days
 		CreatedAt:      time.Now(),
+		UsageLimit:     usageLimit,
+		UsageCount:     0,
+		UsedBy:         []string{},
 	}
 
 	if err := s.repo.CreateInvite(invite); err != nil {
@@ -222,16 +231,28 @@ func (s *OrganizationService) AcceptInvite(inviteID, userID string) error {
 		return fmt.Errorf("invite has expired")
 	}
 
+	// Check usage limit
+	if invite.UsageLimit != nil && invite.UsageCount >= *invite.UsageLimit {
+		return fmt.Errorf("invite usage limit exceeded")
+	}
+
 	// Add user to organization
 	_, err = s.AddMember(invite.OrganizationID, userID, invite.Role)
 	if err != nil {
 		return err
 	}
 
-	// Mark invite as accepted
-	invite.Status = "accepted"
+	// Update usage tracking
+	invite.UsageCount++
 	now := time.Now()
-	invite.AcceptedAt = &now
+	invite.LastUsedAt = &now
+	invite.UsedBy = append(invite.UsedBy, userID)
+
+	// If this was a single-use invite, mark it as accepted
+	if invite.UsageLimit != nil && invite.UsageCount >= *invite.UsageLimit {
+		invite.Status = "accepted"
+		invite.AcceptedAt = &now
+	}
 
 	// Update the invite in the database
 	if err := s.repo.UpdateInvite(invite); err != nil {
@@ -292,4 +313,43 @@ func (s *OrganizationService) GetOrganizationWithMembers(organizationID string) 
 		Members:      members,
 		Invites:      invites,
 	}, nil
+}
+
+// GetAllInvites returns all invites across all organizations (admin function)
+func (s *OrganizationService) GetAllInvites() ([]*models.Invite, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
+	invites, err := s.repo.GetAllInvites()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all invites: %w", err)
+	}
+	return invites, nil
+}
+
+// GetInviteUsageStats returns usage statistics for all invites (admin function)
+func (s *OrganizationService) GetInviteUsageStats() ([]*models.InviteUsageStats, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
+	stats, err := s.repo.GetInviteUsageStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invite usage stats: %w", err)
+	}
+	return stats, nil
+}
+
+// GetInvitesByOrganizationID returns all invites for a specific organization
+func (s *OrganizationService) GetInvitesByOrganizationID(orgID string) ([]models.Invite, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
+	invites, err := s.repo.GetInvitesByOrganization(orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invites for organization: %w", err)
+	}
+	return invites, nil
 }
