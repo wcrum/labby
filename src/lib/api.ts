@@ -249,6 +249,41 @@ class ApiService {
     return response;
   }
 
+  // OIDC Authentication
+  getOIDCLoginURL(inviteCode?: string): string {
+    const url = new URL('/api/auth/oidc/login', API_BASE_URL);
+    if (inviteCode) {
+      url.searchParams.set('invite_code', inviteCode);
+    }
+    return url.toString();
+  }
+
+  async oidcCallback(code: string, state: string): Promise<LoginResponse> {
+    const url = new URL('/api/auth/oidc/callback', API_BASE_URL);
+    url.searchParams.set('code', code);
+    url.searchParams.set('state', state);
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'OIDC callback failed');
+    }
+    
+    const data = await response.json();
+    this.setToken(data.token);
+    return data;
+  }
+
+  async oidcLogout(): Promise<void> {
+    await this.request('/api/auth/oidc/logout', {
+      method: 'POST',
+    });
+  }
+
   // Labs
   async createLab(data: CreateLabRequest): Promise<Lab> {
     return this.request<Lab>('/api/labs', {

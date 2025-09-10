@@ -14,14 +14,16 @@ import (
 // Handler contains all the handlers
 type Handler struct {
 	authService *auth.Service
+	oidcService *auth.OIDCService
 	labService  *lab.Service
 	repo        *database.Repository
 }
 
 // NewHandler creates a new handler
-func NewHandler(authService *auth.Service, labService *lab.Service, repo *database.Repository) *Handler {
+func NewHandler(authService *auth.Service, oidcService *auth.OIDCService, labService *lab.Service, repo *database.Repository) *Handler {
 	return &Handler{
 		authService: authService,
+		oidcService: oidcService,
 		labService:  labService,
 		repo:        repo,
 	}

@@ -100,6 +100,45 @@ db-down: ## Stop database and delete volumes
 	cd $(BACKEND_DIR) && docker-compose -f docker-compose.db.yml down -v
 	@echo "Database stopped and volumes deleted!"
 
+# Dex OIDC targets
+.PHONY: dex-up
+dex-up: ## Start Dex OIDC server
+	@echo "Starting Dex OIDC server..."
+	docker-compose -f docker-compose.dex.yml up -d
+	@echo "Dex OIDC server started on http://localhost:5556"
+
+.PHONY: dex-down
+dex-down: ## Stop Dex OIDC server
+	@echo "Stopping Dex OIDC server..."
+	docker-compose -f docker-compose.dex.yml down
+	@echo "Dex OIDC server stopped"
+
+.PHONY: dex-logs
+dex-logs: ## Show Dex OIDC server logs
+	docker-compose -f docker-compose.dex.yml logs -f
+
+.PHONY: dev-with-dex
+dev-with-dex: dex-up ## Start development environment with Dex OIDC
+	@echo "Starting development environment with Dex OIDC..."
+	@echo "Services:"
+	@echo "  - Dex OIDC Server: http://localhost:5556"
+	@echo "  - Backend API: http://localhost:8080"
+	@echo "  - Frontend: http://localhost:3000"
+	@echo ""
+	@echo "Test users (OIDC):"
+	@echo "  - admin@spectrocloud.com / admin123 (admin role)"
+	@echo "  - user1@spectrocloud.com / user123 (spectrocloud org)"
+	@echo "  - user2@example.com / user123 (example-org)"
+	@echo ""
+	@echo "Press Ctrl+C to stop all services"
+	@echo ""
+	@trap 'make dex-down' INT TERM; \
+	cd $(BACKEND_DIR) && go run cmd/server/main.go & \
+	BACKEND_PID=$$!; \
+	cd .. && pnpm dev & \
+	FRONTEND_PID=$$!; \
+	wait $$BACKEND_PID $$FRONTEND_PID
+
 # Health check
 .PHONY: health
 health: ## Check application health

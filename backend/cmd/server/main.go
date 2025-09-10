@@ -72,6 +72,22 @@ func main() {
 	authService := auth.NewService(jwtSecret, repo)
 	labService := lab.NewService(repo)
 
+	// Initialize OIDC service
+	oidcIssuer := getEnv("OIDC_ISSUER", "http://localhost:5556/dex")
+	oidcClientID := getEnv("OIDC_CLIENT_ID", "spectro-lab-client")
+	oidcClientSecret := getEnv("OIDC_CLIENT_SECRET", "spectro-lab-secret")
+	oidcRedirectURL := getEnv("OIDC_REDIRECT_URL", "http://localhost:8080/auth/callback")
+
+	log.Printf("Initializing OIDC service with issuer: %s", oidcIssuer)
+	oidcService, err := auth.NewOIDCService(oidcIssuer, oidcClientID, oidcClientSecret, oidcRedirectURL, repo, authService)
+	if err != nil {
+		log.Printf("ERROR: Failed to initialize OIDC service: %v", err)
+		log.Println("OIDC authentication will not be available")
+		oidcService = nil
+	} else {
+		log.Printf("OIDC service initialized successfully")
+	}
+
 	// Load lab templates
 	if err := labService.LoadTemplates("./templates"); err != nil {
 		log.Printf("Warning: Failed to load templates: %v", err)
@@ -97,7 +113,7 @@ func main() {
 	log.Printf("Enriching templates with service type information")
 	labService.EnrichTemplatesWithServiceTypes()
 
-	handler := handlers.NewHandler(authService, labService, repo)
+	handler := handlers.NewHandler(authService, oidcService, labService, repo)
 
 	// Create a default organization
 	defaultOrg := &models.Organization{
@@ -199,6 +215,13 @@ func main() {
 
 	// Public routes
 	router.POST("/api/auth/login", handler.Login)
+
+	// OIDC routes
+	if oidcService != nil {
+		router.GET("/api/auth/oidc/login", handler.OIDCLogin)
+		router.GET("/api/auth/oidc/callback", handler.OIDCCallback)
+		router.POST("/api/auth/oidc/logout", handler.OIDCLogout)
+	}
 
 	// Public invite routes
 	router.GET("/api/invites/:id", handler.GetInvite)

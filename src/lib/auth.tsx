@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   login: (email: string, inviteCode?: string) => Promise<void>;
+  oidcLogin: (inviteCode?: string) => void;
   logout: () => void;
   refreshUser: () => Promise<void>;
   isAdmin: boolean;
@@ -55,6 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const oidcLogin = (inviteCode?: string) => {
+    const loginURL = apiService.getOIDCLoginURL(inviteCode);
+    window.location.href = loginURL;
+  };
+
   const logout = () => {
     apiService.clearToken();
     setUser(null);
@@ -73,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser, isAdmin }}>
+    <AuthContext.Provider value={{ user, isLoading, login, oidcLogin, logout, refreshUser, isAdmin }}>
       {children}
     </AuthContext.Provider>
   );
