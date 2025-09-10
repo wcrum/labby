@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/models"
 )
 
 // OrganizationService handles organization-related operations
 type OrganizationService struct {
-	organizations map[string]*models.Organization
-	members       map[string]*models.OrganizationMember
-	invites       map[string]*models.Invite
+	repo *database.Repository
 }
 
 var (
@@ -26,33 +25,31 @@ func NewOrganizationService() *OrganizationService {
 	organizationServiceOnce.Do(func() {
 		fmt.Printf("DEBUG: Initializing new OrganizationService (singleton)\n")
 
+		// Get the database repository instance
+		// Note: This assumes the repository is already initialized
+		// In a real application, you might want to pass the repository as a parameter
 		organizationServiceInstance = &OrganizationService{
-			organizations: make(map[string]*models.Organization),
-			members:       make(map[string]*models.OrganizationMember),
-			invites:       make(map[string]*models.Invite),
+			repo: nil, // Will be set when repository is available
 		}
 
-		// Create a default organization for demo purposes
-		defaultOrg := &models.Organization{
-			ID:          "org-default",
-			Name:        "SpectroCloud",
-			Description: "Default organization for SpectroCloud labs",
-			Domain:      "spectrocloud.com",
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}
-		organizationServiceInstance.organizations[defaultOrg.ID] = defaultOrg
-
-		fmt.Printf("DEBUG: Service initialized with %d organizations, %d members, %d invites\n",
-			len(organizationServiceInstance.organizations), len(organizationServiceInstance.members), len(organizationServiceInstance.invites))
+		fmt.Printf("DEBUG: Service initialized\n")
 	})
 
 	fmt.Printf("DEBUG: Returning existing OrganizationService instance\n")
 	return organizationServiceInstance
 }
 
+// SetRepository sets the database repository for the organization service
+func (s *OrganizationService) SetRepository(repo *database.Repository) {
+	s.repo = repo
+}
+
 // CreateOrganization creates a new organization
 func (s *OrganizationService) CreateOrganization(name, description, domain string) (*models.Organization, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
 	org := &models.Organization{
 		ID:          fmt.Sprintf("org-%s", uuid.New().String()[:8]),
 		Name:        name,
@@ -62,37 +59,58 @@ func (s *OrganizationService) CreateOrganization(name, description, domain strin
 		UpdatedAt:   time.Now(),
 	}
 
-	s.organizations[org.ID] = org
+	if err := s.repo.CreateOrganization(org); err != nil {
+		return nil, fmt.Errorf("failed to create organization: %w", err)
+	}
+
 	return org, nil
 }
 
 // GetOrganization retrieves an organization by ID
 func (s *OrganizationService) GetOrganization(id string) (*models.Organization, error) {
-	org, exists := s.organizations[id]
-	if !exists {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
+	org, err := s.repo.GetOrganizationByID(id)
+	if err != nil {
 		return nil, fmt.Errorf("organization not found")
 	}
 	return org, nil
 }
 
 // GetAllOrganizations returns all organizations
-func (s *OrganizationService) GetAllOrganizations() []*models.Organization {
-	orgs := make([]*models.Organization, 0, len(s.organizations))
-	for _, org := range s.organizations {
-		orgs = append(orgs, org)
+func (s *OrganizationService) GetAllOrganizations() ([]*models.Organization, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
 	}
-	return orgs
+
+	orgs, err := s.repo.GetAllOrganizations()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organizations: %w", err)
+	}
+	return orgs, nil
 }
 
 // AddMember adds a user to an organization
 func (s *OrganizationService) AddMember(organizationID, userID, role string) (*models.OrganizationMember, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
 	// Check if organization exists
-	if _, exists := s.organizations[organizationID]; !exists {
+	_, err := s.repo.GetOrganizationByID(organizationID)
+	if err != nil {
 		return nil, fmt.Errorf("organization not found")
 	}
 
 	// Check if user is already a member
-	for _, member := range s.members {
+	existingMembers, err := s.repo.GetOrganizationMembers(organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing members: %w", err)
+	}
+
+	for _, member := range existingMembers {
 		if member.OrganizationID == organizationID && member.UserID == userID {
 			return nil, fmt.Errorf("user is already a member of this organization")
 		}
@@ -106,36 +124,38 @@ func (s *OrganizationService) AddMember(organizationID, userID, role string) (*m
 		JoinedAt:       time.Now(),
 	}
 
-	s.members[member.ID] = member
+	if err := s.repo.CreateOrganizationMember(member); err != nil {
+		return nil, fmt.Errorf("failed to create organization member: %w", err)
+	}
+
 	return member, nil
 }
 
 // GetOrganizationMembers returns all members of an organization
-func (s *OrganizationService) GetOrganizationMembers(organizationID string) []models.OrganizationMember {
-	var members []models.OrganizationMember
-	for _, member := range s.members {
-		if member.OrganizationID == organizationID {
-			members = append(members, *member)
-		}
+func (s *OrganizationService) GetOrganizationMembers(organizationID string) ([]models.OrganizationMember, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
 	}
-	return members
+
+	members, err := s.repo.GetOrganizationMembers(organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get organization members: %w", err)
+	}
+	return members, nil
 }
 
 // CreateInvite creates an invitation to join an organization
 func (s *OrganizationService) CreateInvite(organizationID, email, role, invitedBy string) (*models.Invite, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
 	fmt.Printf("DEBUG: Creating invite for org: %s, email: %s, role: %s\n", organizationID, email, role)
 
 	// Check if organization exists
-	if _, exists := s.organizations[organizationID]; !exists {
+	_, err := s.repo.GetOrganizationByID(organizationID)
+	if err != nil {
 		return nil, fmt.Errorf("organization not found")
-	}
-
-	// Check if user is already a member
-	for _, member := range s.members {
-		if member.OrganizationID == organizationID {
-			// This is a simplified check - in a real app you'd check by email
-			// For now, we'll just create the invite
-		}
 	}
 
 	invite := &models.Invite{
@@ -149,37 +169,34 @@ func (s *OrganizationService) CreateInvite(organizationID, email, role, invitedB
 		CreatedAt:      time.Now(),
 	}
 
-	s.invites[invite.ID] = invite
-	fmt.Printf("DEBUG: Created invite with ID: %s, total invites now: %d\n", invite.ID, len(s.invites))
+	if err := s.repo.CreateInvite(invite); err != nil {
+		return nil, fmt.Errorf("failed to create invite: %w", err)
+	}
+
+	fmt.Printf("DEBUG: Created invite with ID: %s\n", invite.ID)
 	fmt.Printf("DEBUG: Invite details: %+v\n", invite)
 	return invite, nil
 }
 
 // GetInvite retrieves an invite by ID
 func (s *OrganizationService) GetInvite(id string) (*models.Invite, error) {
-	// Debug: log the search attempt
-	fmt.Printf("DEBUG: Searching for invite with ID: %s\n", id)
-	fmt.Printf("DEBUG: Total invites in system: %d\n", len(s.invites))
-
-	// List all available invite IDs for debugging
-	if len(s.invites) > 0 {
-		fmt.Printf("DEBUG: Available invite IDs: ")
-		for inviteID := range s.invites {
-			fmt.Printf("%s ", inviteID)
-		}
-		fmt.Printf("\n")
-	} else {
-		fmt.Printf("DEBUG: No invites exist in the system\n")
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
 	}
 
-	invite, exists := s.invites[id]
-	if !exists {
-		return nil, fmt.Errorf("invite not found: ID '%s' does not exist in the system (total invites: %d)", id, len(s.invites))
+	// Debug: log the search attempt
+	fmt.Printf("DEBUG: Searching for invite with ID: %s\n", id)
+
+	invite, err := s.repo.GetInviteByID(id)
+	if err != nil {
+		return nil, fmt.Errorf("invite not found: ID '%s' does not exist in the system", id)
 	}
 
 	// Check if invite has expired
 	if time.Now().After(invite.ExpiresAt) {
 		invite.Status = "expired"
+		// Update the invite status in the database
+		s.repo.UpdateInvite(invite)
 	}
 
 	fmt.Printf("DEBUG: Found invite: %+v\n", invite)
@@ -188,6 +205,10 @@ func (s *OrganizationService) GetInvite(id string) (*models.Invite, error) {
 
 // AcceptInvite accepts an invitation and adds the user to the organization
 func (s *OrganizationService) AcceptInvite(inviteID, userID string) error {
+	if s.repo == nil {
+		return fmt.Errorf("repository not initialized")
+	}
+
 	invite, err := s.GetInvite(inviteID)
 	if err != nil {
 		return err
@@ -212,23 +233,40 @@ func (s *OrganizationService) AcceptInvite(inviteID, userID string) error {
 	now := time.Now()
 	invite.AcceptedAt = &now
 
+	// Update the invite in the database
+	if err := s.repo.UpdateInvite(invite); err != nil {
+		return fmt.Errorf("failed to update invite status: %w", err)
+	}
+
 	return nil
 }
 
 // GetInvitesByEmail returns all invites for a specific email
-func (s *OrganizationService) GetInvitesByEmail(email string) []*models.Invite {
-	var invites []*models.Invite
-	for _, invite := range s.invites {
-		if invite.Email == email && invite.Status == "pending" {
+func (s *OrganizationService) GetInvitesByEmail(email string) ([]*models.Invite, error) {
+	if s.repo == nil {
+		return nil, fmt.Errorf("repository not initialized")
+	}
+
+	invites, err := s.repo.GetInvitesByEmail(email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invites by email: %w", err)
+	}
+
+	// Filter for pending invites and check expiration
+	var pendingInvites []*models.Invite
+	for _, invite := range invites {
+		if invite.Status == "pending" {
 			// Check if invite has expired
 			if time.Now().After(invite.ExpiresAt) {
 				invite.Status = "expired"
+				// Update the invite status in the database
+				s.repo.UpdateInvite(invite)
 			} else {
-				invites = append(invites, invite)
+				pendingInvites = append(pendingInvites, invite)
 			}
 		}
 	}
-	return invites
+	return pendingInvites, nil
 }
 
 // GetOrganizationWithMembers returns an organization with its members and invites
@@ -238,13 +276,15 @@ func (s *OrganizationService) GetOrganizationWithMembers(organizationID string) 
 		return nil, err
 	}
 
-	members := s.GetOrganizationMembers(organizationID)
+	members, err := s.GetOrganizationMembers(organizationID)
+	if err != nil {
+		return nil, err
+	}
 
-	var invites []models.Invite
-	for _, invite := range s.invites {
-		if invite.OrganizationID == organizationID {
-			invites = append(invites, *invite)
-		}
+	// Get invites for this organization
+	invites, err := s.repo.GetInvitesByOrganization(organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invites for organization: %w", err)
 	}
 
 	return &models.OrganizationWithMembers{

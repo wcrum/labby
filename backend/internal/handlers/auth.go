@@ -39,6 +39,14 @@ func (h *Handler) Login(c *gin.Context) {
 		} else {
 			organizationID = &invite.OrganizationID
 			fmt.Printf("DEBUG: Found invite organization: %s\n", invite.OrganizationID)
+
+			// Verify the organization exists in the database
+			org, err := h.repo.GetOrganizationByID(invite.OrganizationID)
+			if err != nil {
+				fmt.Printf("DEBUG: Organization %s from invite does not exist in database: %v\n", invite.OrganizationID, err)
+			} else {
+				fmt.Printf("DEBUG: Verified organization exists: %s (ID: %s)\n", org.Name, org.ID)
+			}
 		}
 	}
 

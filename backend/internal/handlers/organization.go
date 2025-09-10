@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/wcrum/labby/internal/models"
 	"github.com/wcrum/labby/internal/services"
 )
@@ -42,6 +43,7 @@ func (h *Handler) CreateOrganization(c *gin.Context) {
 
 	// Create organization using database repository
 	org := &models.Organization{
+		ID:          uuid.New().String()[:8], // Generate 8-character ID
 		Name:        name,
 		Description: description,
 		Domain:      domain,
@@ -147,8 +149,18 @@ func (h *Handler) CreateInvite(c *gin.Context) {
 	userObj := user.(*models.User)
 	fmt.Printf("DEBUG: User from context: %+v\n", userObj)
 
+	// Validate that the organization exists
+	org, err := h.repo.GetOrganizationByID(orgID)
+	if err != nil {
+		fmt.Printf("DEBUG: Organization %s not found: %v\n", orgID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Organization not found"})
+		return
+	}
+	fmt.Printf("DEBUG: Found organization: %s (ID: %s)\n", org.Name, org.ID)
+
 	// Create invite using database repository
 	invite := &models.Invite{
+		ID:             uuid.New().String()[:8], // Generate 8-character ID
 		OrganizationID: orgID,
 		Email:          req.Email,
 		InvitedBy:      userObj.ID,
@@ -236,6 +248,7 @@ func (h *Handler) AcceptInvite(c *gin.Context) {
 	fmt.Printf("DEBUG: AcceptInvite request: %+v\n", req)
 
 	orgService := services.NewOrganizationService()
+	orgService.SetRepository(h.repo)
 
 	// First, get the invite to get the organization ID
 	invite, err := orgService.GetInvite(inviteID)
@@ -311,6 +324,7 @@ func (h *Handler) GetUserOrganization(c *gin.Context) {
 	fmt.Printf("DEBUG: User has organization ID: %s\n", *userObj.OrganizationID)
 
 	orgService := services.NewOrganizationService()
+	orgService.SetRepository(h.repo)
 	organization, err := orgService.GetOrganization(*userObj.OrganizationID)
 	if err != nil {
 		fmt.Printf("DEBUG: Failed to get organization %s: %v\n", *userObj.OrganizationID, err)

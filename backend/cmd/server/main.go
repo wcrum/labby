@@ -25,11 +25,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wcrum/labby/internal/auth"
 	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/handlers"
 	"github.com/wcrum/labby/internal/lab"
+	"github.com/wcrum/labby/internal/models"
 
 	_ "github.com/wcrum/labby/docs" // This will be generated
 
@@ -96,6 +98,29 @@ func main() {
 	labService.EnrichTemplatesWithServiceTypes()
 
 	handler := handlers.NewHandler(authService, labService, repo)
+
+	// Create a default organization
+	defaultOrg := &models.Organization{
+		ID:          "default",
+		Name:        "SpectroCloud",
+		Description: "Default organization for SpectroCloud labs",
+		Domain:      "spectrocloud.com",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Check if default organization already exists
+	existingOrg, err := repo.GetOrganizationByID("default")
+	if err != nil {
+		// Organization doesn't exist, create it
+		if err := repo.CreateOrganization(defaultOrg); err != nil {
+			log.Printf("Failed to create default organization: %v", err)
+		} else {
+			log.Printf("Created default organization: %s", defaultOrg.Name)
+		}
+	} else {
+		log.Printf("Default organization already exists: %s", existingOrg.Name)
+	}
 
 	// Create a default admin user
 	adminUser, err := authService.CreateAdminUser("admin@spectrocloud.com", "Admin User")

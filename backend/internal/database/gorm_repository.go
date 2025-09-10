@@ -206,6 +206,32 @@ func (r *Repository) GetInvitesByOrganizationID(orgID string) ([]*models.Invite,
 	return invites, err
 }
 
+// GetInvitesByOrganization retrieves all invites for a specific organization (alias for GetInvitesByOrganizationID)
+func (r *Repository) GetInvitesByOrganization(orgID string) ([]models.Invite, error) {
+	var invites []models.Invite
+	err := r.db.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&invites).Error
+	return invites, err
+}
+
+// GetInvitesByEmail retrieves all invites for a specific email
+func (r *Repository) GetInvitesByEmail(email string) ([]*models.Invite, error) {
+	var invites []*models.Invite
+	err := r.db.Where("email = ?", email).Order("created_at DESC").Find(&invites).Error
+	return invites, err
+}
+
+// CreateOrganizationMember creates a new organization member in the database
+func (r *Repository) CreateOrganizationMember(member *models.OrganizationMember) error {
+	return r.db.Create(member).Error
+}
+
+// GetOrganizationMembers retrieves all members of a specific organization
+func (r *Repository) GetOrganizationMembers(orgID string) ([]models.OrganizationMember, error) {
+	var members []models.OrganizationMember
+	err := r.db.Where("organization_id = ?", orgID).Order("joined_at ASC").Find(&members).Error
+	return members, err
+}
+
 // UpdateInvite updates an invite in the database
 func (r *Repository) UpdateInvite(invite *models.Invite) error {
 	return r.db.Save(invite).Error
