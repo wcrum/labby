@@ -53,6 +53,7 @@ func (h *Handler) GetLabs(c *gin.Context) {
 // @Param id path string true "Lab ID"
 // @Success 200 {object} models.LabResponse
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Lab not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /labs/{id} [get]
@@ -63,13 +64,9 @@ func (h *Handler) GetLab(c *gin.Context) {
 		return
 	}
 
-	labInstance, err := h.labService.GetLab(labID)
-	if err != nil {
-		if err == lab.ErrLabNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Lab not found"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get lab"})
-		}
+	// Check lab access authorization
+	labInstance, ok := h.CheckLabAccess(c, labID)
+	if !ok {
 		return
 	}
 
@@ -126,6 +123,7 @@ func (h *Handler) CreateLab(c *gin.Context) {
 // @Param id path string true "Lab ID"
 // @Success 204 "No content"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Lab not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /labs/{id} [delete]
@@ -133,6 +131,12 @@ func (h *Handler) DeleteLab(c *gin.Context) {
 	labID := c.Param("id")
 	if labID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	// Check lab access authorization
+	_, ok := h.CheckLabAccess(c, labID)
+	if !ok {
 		return
 	}
 
@@ -157,6 +161,7 @@ func (h *Handler) DeleteLab(c *gin.Context) {
 // @Param id path string true "Lab ID"
 // @Success 200 {object} models.Lab
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Lab not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /labs/{id}/stop [post]
@@ -164,6 +169,12 @@ func (h *Handler) StopLab(c *gin.Context) {
 	labID := c.Param("id")
 	if labID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	// Check lab access authorization
+	_, ok := h.CheckLabAccess(c, labID)
+	if !ok {
 		return
 	}
 
@@ -196,6 +207,7 @@ func (h *Handler) StopLab(c *gin.Context) {
 // @Param id path string true "Lab ID"
 // @Success 200 {object} lab.LabProgress
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Lab not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /labs/{id}/progress [get]
@@ -203,6 +215,12 @@ func (h *Handler) GetLabProgress(c *gin.Context) {
 	labID := c.Param("id")
 	if labID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	// Check lab access authorization
+	_, ok := h.CheckLabAccess(c, labID)
+	if !ok {
 		return
 	}
 
@@ -223,6 +241,7 @@ func (h *Handler) GetLabProgress(c *gin.Context) {
 // @Param id path string true "Lab ID"
 // @Success 200 {object} map[string]interface{} "Cleanup successful"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Lab not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /labs/{id}/cleanup/palette-project [post]
@@ -233,14 +252,9 @@ func (h *Handler) CleanupPaletteProject(c *gin.Context) {
 		return
 	}
 
-	// Get the lab first
-	labInstance, err := h.labService.GetLab(labID)
-	if err != nil {
-		if err == lab.ErrLabNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Lab not found"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get lab"})
-		}
+	// Check lab access authorization
+	labInstance, ok := h.CheckLabAccess(c, labID)
+	if !ok {
 		return
 	}
 
@@ -262,7 +276,7 @@ func (h *Handler) CleanupPaletteProject(c *gin.Context) {
 	}
 
 	// Execute cleanup
-	err = paletteService.ExecuteCleanup(cleanupCtx)
+	err := paletteService.ExecuteCleanup(cleanupCtx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cleanup Palette Project"})
 		return
@@ -293,6 +307,7 @@ func (h *Handler) GetUserLabs(c *gin.Context) {
 // @Param id path string true "Lab ID"
 // @Success 200 {object} map[string]interface{} "Cleanup successful"
 // @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Failure 404 {object} map[string]interface{} "Lab not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /labs/{id}/cleanup [post]
@@ -303,14 +318,9 @@ func (h *Handler) CleanupFailedLab(c *gin.Context) {
 		return
 	}
 
-	// Get the lab first
-	labInstance, err := h.labService.GetLab(labID)
-	if err != nil {
-		if err == lab.ErrLabNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Lab not found"})
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get lab"})
-		}
+	// Check lab access authorization
+	labInstance, ok := h.CheckLabAccess(c, labID)
+	if !ok {
 		return
 	}
 
@@ -322,7 +332,7 @@ func (h *Handler) CleanupFailedLab(c *gin.Context) {
 	}
 
 	// Execute cleanup
-	err = h.labService.CleanupLabServices(cleanupCtx)
+	err := h.labService.CleanupLabServices(cleanupCtx)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cleanup lab"})
 		return

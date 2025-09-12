@@ -1,7 +1,7 @@
 name: "Terraform Proxmox Lab"
 id: "terraform-proxmox-lab"
 description: "A lab that creates a Terraform Cloud workspace with Proxmox configuration"
-expiration_duration: "6h"
+expiration_duration: "24h"
 owner: "admin@spectrocloud.com"
 services:
   - name: "Training Proxmox User"

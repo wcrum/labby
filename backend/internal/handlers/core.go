@@ -79,6 +79,37 @@ func (h *Handler) AdminMiddleware() gin.HandlerFunc {
 	}
 }
 
+// CheckLabAccess verifies that the authenticated user can access the specified lab
+// Returns the lab if access is granted, otherwise returns an error response
+func (h *Handler) CheckLabAccess(c *gin.Context, labID string) (*models.Lab, bool) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return nil, false
+	}
+
+	userObj := user.(*models.User)
+
+	// Get the lab
+	labInstance, err := h.labService.GetLab(labID)
+	if err != nil {
+		if err == lab.ErrLabNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Lab not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get lab"})
+		}
+		return nil, false
+	}
+
+	// Check if user is admin or lab owner
+	if !h.authService.IsAdmin(userObj) && labInstance.OwnerID != userObj.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: You can only access your own labs"})
+		return nil, false
+	}
+
+	return labInstance, true
+}
+
 // HealthCheck handles health check endpoint
 // @Summary Health check
 // @Description Check if the API is running
