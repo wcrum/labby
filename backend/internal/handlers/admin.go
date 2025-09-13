@@ -492,14 +492,14 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 		// Services that take *models.ServiceConfig (palette_project, palette_tenant)
 		s.ConfigureFromServiceConfig(serviceConfig)
 	case interface {
-		ConfigureFromServiceConfig(map[string]string, string)
+		ConfigureFromServiceConfig(models.ServiceConfigMap, string)
 	}:
-		// Services that take (map[string]string, string) (terraform_cloud)
+		// Services that take (ServiceConfigMap, string) (terraform_cloud)
 		s.ConfigureFromServiceConfig(serviceConfig.Config, req.LabID)
 	case interface {
-		ConfigureFromServiceConfig(map[string]string)
+		ConfigureFromServiceConfig(models.ServiceConfigMap)
 	}:
-		// Services that take map[string]string (guacamole, proxmox_user)
+		// Services that take ServiceConfigMap (guacamole, proxmox_user)
 		s.ConfigureFromServiceConfig(serviceConfig.Config)
 	}
 

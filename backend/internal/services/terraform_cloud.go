@@ -17,22 +17,22 @@ import (
 
 	"github.com/wcrum/labby/internal/interfaces"
 	"github.com/wcrum/labby/internal/models"
-	"gopkg.in/yaml.v3"
 )
 
 // TerraformCloudService handles setup and cleanup for Terraform Cloud workspaces
 type TerraformCloudService struct {
-	host         string
-	apiToken     string
-	organization string
-	workspaceID  string
-	uploadURL    string
-	// Terraform configuration settings
-	sourceDirectory string
-	agentPoolID     string
-	executionMode   string
-	variables       map[string]string
-	sensitiveVars   map[string]string
+	Host            string
+	APIToken        string
+	Organization    string
+	AgentPoolID     string
+	ExecutionMode   string
+	SourceDirectory string
+	Variables       map[string]string
+	Secrets         map[string]string
+
+	// Internal fields not part of config
+	workspaceID string
+	uploadURL   string
 }
 
 // Global VLAN tag tracking (in a real production environment, this should be in a database)
@@ -44,11 +44,11 @@ var (
 // NewTerraformCloudService creates a new Terraform Cloud service instance
 func NewTerraformCloudService() *TerraformCloudService {
 	return &TerraformCloudService{
-		host:          "",
-		apiToken:      "",
-		organization:  "",
-		variables:     make(map[string]string),
-		sensitiveVars: make(map[string]string),
+		Host:         "",
+		APIToken:     "",
+		Organization: "",
+		Variables:    make(map[string]string),
+		Secrets:      make(map[string]string),
 	}
 }
 
@@ -123,126 +123,98 @@ func (v *TerraformCloudService) processTemplateString(value string, labID string
 }
 
 // ConfigureFromServiceConfig configures the service from a service configuration
-func (v *TerraformCloudService) ConfigureFromServiceConfig(config map[string]string, labID string) {
+func (v *TerraformCloudService) ConfigureFromServiceConfig(config models.ServiceConfigMap, labID string) {
 	// Debug logging
 	fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: Received config with %d keys\n", len(config))
 
-	// Parse the config using YAML parsing directly into the service struct
-	err := v.parseConfigFromYAML(config, labID)
+	// Parse the config directly into the service struct
+	err := v.parseConfig(config, labID)
 	if err != nil {
 		fmt.Printf("TerraformCloudService: Error parsing config: %v\n", err)
 		return
 	}
 
-	fmt.Printf("TerraformCloudService: Set host to: %s\n", v.host)
-	fmt.Printf("TerraformCloudService: Agent pool ID set to: %s\n", v.agentPoolID)
-	fmt.Printf("TerraformCloudService: Execution mode set to: %s\n", v.executionMode)
+	fmt.Printf("TerraformCloudService: Set host to: %s\n", v.Host)
+	fmt.Printf("TerraformCloudService: Agent pool ID set to: %s\n", v.AgentPoolID)
+	fmt.Printf("TerraformCloudService: Execution mode set to: %s\n", v.ExecutionMode)
 
 	// Calculate IP octet from VLAN tag if both exist
-	if vlanTagStr, exists := v.variables["vlan_tag"]; exists {
+	if vlanTagStr, exists := v.Variables["vlan_tag"]; exists {
 		var vlanTag int
 		if _, err := fmt.Sscanf(vlanTagStr, "%d", &vlanTag); err == nil {
 			// Extract last 3 digits of VLAN tag
 			ipOctet := vlanTag % 1000
-			v.variables["ip_octet"] = fmt.Sprintf("%d", ipOctet)
+			v.Variables["ip_octet"] = fmt.Sprintf("%d", ipOctet)
 			fmt.Printf("TerraformCloudService: Calculated IP octet %d from VLAN tag %s\n", ipOctet, vlanTagStr)
 		}
 	}
 
 	// Debug logging
-	fmt.Printf("TerraformCloudService: Extracted %d regular variables: %v\n", len(v.variables), v.variables)
-	fmt.Printf("TerraformCloudService: Extracted %d sensitive variables: %v\n", len(v.sensitiveVars), v.sensitiveVars)
+	fmt.Printf("TerraformCloudService: Extracted %d regular variables: %v\n", len(v.Variables), v.Variables)
+	fmt.Printf("TerraformCloudService: Extracted %d sensitive variables: %v\n", len(v.Secrets), v.Secrets)
 
 	// Special logging for vlan_tag
-	if vlanTag, exists := v.variables["vlan_tag"]; exists {
+	if vlanTag, exists := v.Variables["vlan_tag"]; exists {
 		fmt.Printf("TerraformCloudService: VLAN tag set to: %s\n", vlanTag)
 	}
 }
 
-// parseConfigFromYAML reconstructs the YAML structure from the flattened config and parses it directly into the service
-func (v *TerraformCloudService) parseConfigFromYAML(config map[string]string, labID string) error {
-	// Reconstruct the YAML structure by grouping keys
-	yamlData := make(map[string]interface{})
-	variables := make(map[string]string)
-	secrets := make(map[string]string)
-
-	// Define terraform cloud configuration keys
-	terraformCloudKeys := map[string]bool{
-		"host":             true,
-		"api_token":        true,
-		"organization":     true,
-		"source_directory": true,
-		"agent_pool_id":    true,
-		"execution_mode":   true,
+// parseConfig directly assigns config values to the service struct from nested structure
+func (v *TerraformCloudService) parseConfig(config models.ServiceConfigMap, labID string) error {
+	// Initialize maps if they don't exist
+	if v.Variables == nil {
+		v.Variables = make(map[string]string)
+	}
+	if v.Secrets == nil {
+		v.Secrets = make(map[string]string)
 	}
 
-	// Categorize keys based on naming convention
-	for key, value := range config {
-		if terraformCloudKeys[key] {
-			yamlData[key] = value
-		} else {
-			// Check if key indicates a secret based on naming convention
-			keyLower := strings.ToLower(key)
-			isSecret := strings.Contains(keyLower, "token") ||
-				strings.Contains(keyLower, "secret") ||
-				strings.Contains(keyLower, "key") ||
-				strings.Contains(keyLower, "password")
+	// Get top-level configuration values
+	if host, exists := config.GetString("host"); exists {
+		v.Host = host
+	}
+	if apiToken, exists := config.GetString("api_token"); exists {
+		v.APIToken = apiToken
+	}
+	if organization, exists := config.GetString("organization"); exists {
+		v.Organization = organization
+	}
+	if sourceDirectory, exists := config.GetString("source_directory"); exists {
+		v.SourceDirectory = sourceDirectory
+	}
+	if agentPoolID, exists := config.GetString("agent_pool_id"); exists {
+		v.AgentPoolID = agentPoolID
+	}
+	if executionMode, exists := config.GetString("execution_mode"); exists {
+		v.ExecutionMode = executionMode
+	}
 
-			if isSecret {
-				secrets[key] = value
-			} else {
-				variables[key] = value
-			}
+	// Get variables from nested structure
+	if variables, exists := config.GetStringMap("variables"); exists {
+		for key, value := range variables {
+			v.Variables[key] = value
 		}
 	}
 
-	// Add the nested structures
-	yamlData["variables"] = variables
-	yamlData["secrets"] = secrets
-
-	// Convert to YAML and parse it properly
-	yamlBytes, err := yaml.Marshal(yamlData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config to YAML: %w", err)
+	// Get secrets from nested structure
+	if secrets, exists := config.GetStringMap("secrets"); exists {
+		for key, value := range secrets {
+			v.Secrets[key] = value
+		}
 	}
-
-	// Create a temporary struct to parse the YAML
-	type tempConfig struct {
-		Host            string            `yaml:"host"`
-		APIToken        string            `yaml:"api_token"`
-		Organization    string            `yaml:"organization"`
-		AgentPoolID     string            `yaml:"agent_pool_id"`
-		ExecutionMode   string            `yaml:"execution_mode"`
-		SourceDirectory string            `yaml:"source_directory"`
-		Variables       map[string]string `yaml:"variables"`
-		Secrets         map[string]string `yaml:"secrets"`
-	}
-
-	var temp tempConfig
-	if err := yaml.Unmarshal(yamlBytes, &temp); err != nil {
-		return fmt.Errorf("failed to unmarshal YAML config: %w", err)
-	}
-
-	// Populate the service struct directly
-	v.host = temp.Host
-	v.apiToken = temp.APIToken
-	v.organization = temp.Organization
-	v.sourceDirectory = temp.SourceDirectory
-	v.agentPoolID = temp.AgentPoolID
-	v.executionMode = temp.ExecutionMode
 
 	// Process variables and secrets with template string processing
-	for key, value := range temp.Variables {
+	for key, value := range v.Variables {
 		processedValue := v.processTemplateString(value, labID)
-		v.variables[key] = processedValue
+		v.Variables[key] = processedValue
 		if value != processedValue {
 			fmt.Printf("TerraformCloudService: Processed variable %s: '%s' -> '%s'\n", key, value, processedValue)
 		}
 	}
 
-	for key, value := range temp.Secrets {
+	for key, value := range v.Secrets {
 		processedValue := v.processTemplateString(value, labID)
-		v.sensitiveVars[key] = processedValue
+		v.Secrets[key] = processedValue
 	}
 
 	return nil
@@ -301,7 +273,7 @@ func (v *TerraformCloudService) ExecuteSetup(ctx *interfaces.SetupContext) error
 		ctx.UpdateProgress("Creating Workspace", "running", "Creating workspace in Terraform Cloud...")
 	}
 
-	if v.host == "" || v.apiToken == "" || v.organization == "" {
+	if v.Host == "" || v.APIToken == "" || v.Organization == "" {
 		err := fmt.Errorf("TF_CLOUD_HOST, TF_CLOUD_API_TOKEN, and TF_CLOUD_ORGANIZATION environment variables are required")
 		if ctx.UpdateProgress != nil {
 			ctx.UpdateProgress("Creating Workspace", "failed", err.Error())
@@ -402,17 +374,17 @@ func (v *TerraformCloudService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	}
 
 	// Add credentials
-	workspaceURL := fmt.Sprintf("%s/app/%s/workspaces/%s", v.host, v.organization, workspaceID)
+	workspaceURL := fmt.Sprintf("%s/app/%s/workspaces/%s", v.Host, v.Organization, workspaceID)
 
 	credential := &interfaces.Credential{
 		ID:        fmt.Sprintf("terraform-cloud-%s", shortID),
 		LabID:     ctx.LabID,
 		Label:     "Terraform Cloud Workspace",
 		Username:  "API Token",
-		Password:  v.apiToken,
+		Password:  v.APIToken,
 		URL:       workspaceURL,
 		ExpiresAt: time.Now().Add(time.Duration(ctx.Duration) * time.Minute),
-		Notes:     fmt.Sprintf("Workspace ID: %s\nOrganization: %s", workspaceID, v.organization),
+		Notes:     fmt.Sprintf("Workspace ID: %s\nOrganization: %s", workspaceID, v.Organization),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -429,7 +401,7 @@ func (v *TerraformCloudService) ExecuteSetup(ctx *interfaces.SetupContext) error
 func (v *TerraformCloudService) ExecuteCleanup(ctx *interfaces.CleanupContext) error {
 	fmt.Printf("Cleaning up Terraform Cloud workspace for lab %s...\n", ctx.LabID)
 	fmt.Printf("TerraformCloudService.ExecuteCleanup: host='%s', organization='%s', apiToken='%s'\n",
-		v.host, v.organization, v.apiToken)
+		v.Host, v.Organization, v.APIToken)
 
 	// Get workspace ID from lab data
 	var workspaceID string
@@ -503,10 +475,10 @@ func (v *TerraformCloudService) ExecuteCleanup(ctx *interfaces.CleanupContext) e
 // createWorkspace creates a new Terraform Cloud workspace
 func (v *TerraformCloudService) createWorkspace(ctx *interfaces.SetupContext, shortID string) (string, error) {
 	// Validate required configuration
-	if v.executionMode == "" {
+	if v.ExecutionMode == "" {
 		return "", fmt.Errorf("execution_mode is required but not configured")
 	}
-	if v.agentPoolID == "" {
+	if v.AgentPoolID == "" {
 		return "", fmt.Errorf("agent_pool_id is required but not configured")
 	}
 
@@ -522,8 +494,8 @@ func (v *TerraformCloudService) createWorkspace(ctx *interfaces.SetupContext, sh
 				"auto-apply":            false,
 				"file-triggers-enabled": true,
 				"terraform-version":     "1.5.0",
-				"execution-mode":        v.executionMode,
-				"agent-pool-id":         v.agentPoolID,
+				"execution-mode":        v.ExecutionMode,
+				"agent-pool-id":         v.AgentPoolID,
 			},
 		},
 	}
@@ -534,13 +506,13 @@ func (v *TerraformCloudService) createWorkspace(ctx *interfaces.SetupContext, sh
 	}
 
 	// Create HTTP request
-	url := fmt.Sprintf("%s/api/v2/organizations/%s/workspaces", v.host, v.organization)
+	url := fmt.Sprintf("%s/api/v2/organizations/%s/workspaces", v.Host, v.Organization)
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 	req.Header.Set("Content-Type", "application/vnd.api+json")
 
 	// Make request
@@ -583,15 +555,15 @@ func (v *TerraformCloudService) createWorkspace(ctx *interfaces.SetupContext, sh
 // findWorkspaceByName searches for a Terraform Cloud workspace by name
 func (v *TerraformCloudService) findWorkspaceByName(workspaceName string) (string, error) {
 	fmt.Printf("Searching for Terraform Cloud workspace: %s\n", workspaceName)
-	fmt.Printf("TerraformCloudService.findWorkspaceByName: host='%s', organization='%s'\n", v.host, v.organization)
+	fmt.Printf("TerraformCloudService.findWorkspaceByName: host='%s', organization='%s'\n", v.Host, v.Organization)
 
-	url := fmt.Sprintf("%s/api/v2/organizations/%s/workspaces?search[name]=%s", v.host, v.organization, workspaceName)
+	url := fmt.Sprintf("%s/api/v2/organizations/%s/workspaces?search[name]=%s", v.Host, v.Organization, workspaceName)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create search request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -653,13 +625,13 @@ func (v *TerraformCloudService) cleanupWorkspaceRuns(workspaceID string) error {
 	fmt.Printf("Cleaning up runs for workspace %s...\n", workspaceID)
 
 	// Get all runs for the workspace
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s/runs", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/runs", v.Host, workspaceID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create runs request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -725,13 +697,13 @@ func (v *TerraformCloudService) cleanupWorkspaceRuns(workspaceID string) error {
 
 // cancelRun cancels a Terraform Cloud run
 func (v *TerraformCloudService) cancelRun(runID string) error {
-	url := fmt.Sprintf("%s/api/v2/runs/%s/actions/cancel", v.host, runID)
+	url := fmt.Sprintf("%s/api/v2/runs/%s/actions/cancel", v.Host, runID)
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create cancel request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 	req.Header.Set("Content-Type", "application/vnd.api+json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -754,13 +726,13 @@ func (v *TerraformCloudService) cleanupWorkspaceVariables(workspaceID string) er
 	fmt.Printf("Cleaning up variables for workspace %s...\n", workspaceID)
 
 	// Get all variables for the workspace
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars", v.Host, workspaceID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create variables request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -813,13 +785,13 @@ func (v *TerraformCloudService) cleanupWorkspaceVariables(workspaceID string) er
 
 // deleteVariable deletes a Terraform Cloud variable
 func (v *TerraformCloudService) deleteVariable(workspaceID, variableID string) error {
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars/%s", v.host, workspaceID, variableID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars/%s", v.Host, workspaceID, variableID)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create delete variable request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -838,13 +810,13 @@ func (v *TerraformCloudService) deleteVariable(workspaceID, variableID string) e
 
 // workspaceExists checks if a workspace exists by making a GET request to the workspace endpoint
 func (v *TerraformCloudService) workspaceExists(workspaceID string) (bool, error) {
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.Host, workspaceID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create workspace check request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
@@ -873,13 +845,13 @@ func (v *TerraformCloudService) deleteWorkspace(workspaceID string) error {
 
 // safeDeleteWorkspace attempts to safely delete a workspace using the safe-delete endpoint
 func (v *TerraformCloudService) safeDeleteWorkspace(workspaceID string) error {
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s/actions/safe-delete", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/actions/safe-delete", v.Host, workspaceID)
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create safe delete request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 	req.Header.Set("Content-Type", "application/vnd.api+json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -912,13 +884,13 @@ func (v *TerraformCloudService) safeDeleteWorkspace(workspaceID string) error {
 
 // forceDeleteWorkspace forces deletion of a workspace using the DELETE endpoint
 func (v *TerraformCloudService) forceDeleteWorkspace(workspaceID string) error {
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s", v.Host, workspaceID)
 	req, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create force delete request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -1015,13 +987,13 @@ func (v *TerraformCloudService) createConfigurationVersion(workspaceID string) (
 		return "", fmt.Errorf("failed to marshal configuration version data: %v", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s/configuration-versions", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/configuration-versions", v.Host, workspaceID)
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return "", fmt.Errorf("failed to create configuration version request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 	req.Header.Set("Content-Type", "application/vnd.api+json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -1322,13 +1294,13 @@ func (v *TerraformCloudService) triggerRun(workspaceID, message string) (string,
 		return "", fmt.Errorf("failed to marshal run data: %v", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v2/runs", v.host)
+	url := fmt.Sprintf("%s/api/v2/runs", v.Host)
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return "", fmt.Errorf("failed to create run request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 	req.Header.Set("Content-Type", "application/vnd.api+json")
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -1368,13 +1340,13 @@ func (v *TerraformCloudService) triggerRun(workspaceID, message string) (string,
 
 // getRunStatus gets the status of a Terraform run
 func (v *TerraformCloudService) getRunStatus(runID string) (string, error) {
-	url := fmt.Sprintf("%s/api/v2/runs/%s", v.host, runID)
+	url := fmt.Sprintf("%s/api/v2/runs/%s", v.Host, runID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create status request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
@@ -1422,13 +1394,13 @@ func (v *TerraformCloudService) UploadCustomConfiguration(workspaceID string, co
 
 // LoadTerraformConfiguration loads Terraform configuration from the spacewalk directory
 func (v *TerraformCloudService) LoadTerraformConfiguration(ctx *interfaces.SetupContext) (map[string]string, error) {
-	if v.sourceDirectory == "" {
+	if v.SourceDirectory == "" {
 		return nil, fmt.Errorf("no source directory specified for Terraform configuration. Please configure a source_directory in the service configuration")
 	}
 
 	// Construct the full path to the Terraform configuration
 	// The sourceDirectory is relative to the project root, but we're running from the backend directory
-	configPath := filepath.Join("..", v.sourceDirectory)
+	configPath := filepath.Join("..", v.SourceDirectory)
 
 	// Check if the directory exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -1496,7 +1468,7 @@ func (v *TerraformCloudService) templatizeContent(content string, ctx *interface
 	}
 
 	// Add variables from service configuration
-	for key, value := range v.variables {
+	for key, value := range v.Variables {
 		replacements["${"+key+"}"] = value
 	}
 
@@ -1515,20 +1487,20 @@ func (v *TerraformCloudService) templatizeContent(content string, ctx *interface
 
 // SetWorkspaceVariables sets variables in the Terraform Cloud workspace
 func (v *TerraformCloudService) SetWorkspaceVariables(workspaceID string) error {
-	fmt.Printf("Setting %d regular variables in workspace %s\n", len(v.variables), workspaceID)
+	fmt.Printf("Setting %d regular variables in workspace %s\n", len(v.Variables), workspaceID)
 
 	// Set regular variables
-	for key, value := range v.variables {
+	for key, value := range v.Variables {
 		fmt.Printf("Setting variable %s = %s\n", key, value)
 		if err := v.setWorkspaceVariable(workspaceID, key, value, false); err != nil {
 			return fmt.Errorf("failed to set variable %s: %v", key, err)
 		}
 	}
 
-	fmt.Printf("Setting %d sensitive variables in workspace %s\n", len(v.sensitiveVars), workspaceID)
+	fmt.Printf("Setting %d sensitive variables in workspace %s\n", len(v.Secrets), workspaceID)
 
 	// Set sensitive variables
-	for key, value := range v.sensitiveVars {
+	for key, value := range v.Secrets {
 		fmt.Printf("Setting sensitive variable %s = [REDACTED]\n", key)
 		if err := v.setWorkspaceVariable(workspaceID, key, value, true); err != nil {
 			return fmt.Errorf("failed to set sensitive variable %s: %v", key, err)
@@ -1557,13 +1529,13 @@ func (v *TerraformCloudService) setWorkspaceVariable(workspaceID, key, value str
 		return fmt.Errorf("failed to marshal variable data: %v", err)
 	}
 
-	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars", v.host, workspaceID)
+	url := fmt.Sprintf("%s/api/v2/workspaces/%s/vars", v.Host, workspaceID)
 	req, err := http.NewRequest("POST", url, strings.NewReader(string(jsonData)))
 	if err != nil {
 		return fmt.Errorf("failed to create variable request: %v", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+v.apiToken)
+	req.Header.Set("Authorization", "Bearer "+v.APIToken)
 	req.Header.Set("Content-Type", "application/vnd.api+json")
 
 	client := &http.Client{Timeout: 30 * time.Second}

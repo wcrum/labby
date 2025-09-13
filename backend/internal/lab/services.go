@@ -196,21 +196,21 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	// Set environment variables from service config with comprehensive logging
 	s.progressTracker.AddLog(labID, "Setting up environment variables from service config...")
 
-	if host, ok := serviceConfig.Config["palette_host"]; ok {
+	if host, exists := serviceConfig.Config.GetString("palette_host"); exists {
 		os.Setenv("palette_host", host)
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Set palette_host: %s", host))
 	} else {
 		s.progressTracker.AddLog(labID, "Warning: palette_host not found in service config")
 	}
 
-	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
+	if systemUsername, exists := serviceConfig.Config.GetString("palette_system_username"); exists {
 		os.Setenv("palette_system_username", systemUsername)
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Set palette_system_username: %s", systemUsername))
 	} else {
 		s.progressTracker.AddLog(labID, "Warning: palette_system_username not found in service config")
 	}
 
-	if systemPassword, ok := serviceConfig.Config["palette_system_password"]; ok {
+	if systemPassword, exists := serviceConfig.Config.GetString("palette_system_password"); exists {
 		os.Setenv("palette_system_password", systemPassword)
 		s.progressTracker.AddLog(labID, "Set palette_system_password: [REDACTED]")
 	} else {
@@ -232,13 +232,13 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	paletteTenantService.ConfigureFromServiceConfig(serviceConfig)
 
 	// Log the service config values that the service will use
-	if host, ok := serviceConfig.Config["palette_host"]; ok {
+	if host, exists := serviceConfig.Config.GetString("palette_host"); exists {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_host: %s", host))
 	}
-	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
+	if systemUsername, exists := serviceConfig.Config.GetString("palette_system_username"); exists {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_system_username: %s", systemUsername))
 	}
-	if _, ok := serviceConfig.Config["palette_system_password"]; ok {
+	if _, exists := serviceConfig.Config.GetString("palette_system_password"); exists {
 		s.progressTracker.AddLog(labID, "Service will use palette_system_password: [REDACTED]")
 	}
 
@@ -325,8 +325,12 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 
 // provisionTerraformCloudService provisions a Terraform Cloud service
 func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *models.ServiceConfig) {
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", serviceConfig.Config["host"]))
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", serviceConfig.Config["organization"]))
+	if host, exists := serviceConfig.Config.GetString("host"); exists {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", host))
+	}
+	if organization, exists := serviceConfig.Config.GetString("organization"); exists {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", organization))
+	}
 
 	// Get lab for context
 	lab, err := s.repo.GetLabByID(labID)

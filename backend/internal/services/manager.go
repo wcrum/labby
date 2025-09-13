@@ -155,16 +155,16 @@ func (sm *ServiceManager) CleanupLabServices(ctx *interfaces.CleanupContext) err
 			s.ConfigureFromServiceConfig(serviceConfig)
 			fmt.Printf("Configured service %s with service config data (ServiceConfig)\n", service.GetName())
 		case interface {
-			ConfigureFromServiceConfig(map[string]string, string)
+			ConfigureFromServiceConfig(models.ServiceConfigMap, string)
 		}:
-			// Services that take (map[string]string, string) (terraform_cloud)
+			// Services that take (ServiceConfigMap, string) (terraform_cloud)
 			fmt.Printf("ServiceManager: Calling ConfigureFromServiceConfig for terraform_cloud with %d config keys\n", len(serviceConfig.Config))
 			s.ConfigureFromServiceConfig(serviceConfig.Config, ctx.LabID)
 			fmt.Printf("Configured service %s with service config data (Config + LabID)\n", service.GetName())
 		case interface {
-			ConfigureFromServiceConfig(map[string]string)
+			ConfigureFromServiceConfig(models.ServiceConfigMap)
 		}:
-			// Services that take map[string]string (guacamole, proxmox_user)
+			// Services that take ServiceConfigMap (guacamole, proxmox_user)
 			s.ConfigureFromServiceConfig(serviceConfig.Config)
 			fmt.Printf("Configured service %s with service config data (Config)\n", service.GetName())
 		default:

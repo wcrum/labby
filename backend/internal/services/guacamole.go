@@ -33,17 +33,17 @@ func NewGuacamoleService() *GuacamoleService {
 }
 
 // ConfigureFromServiceConfig configures the service from a service configuration
-func (v *GuacamoleService) ConfigureFromServiceConfig(config map[string]string) {
-	if host, ok := config["host"]; ok {
+func (v *GuacamoleService) ConfigureFromServiceConfig(config models.ServiceConfigMap) {
+	if host, exists := config.GetString("host"); exists {
 		v.host = host
 	}
-	if adminUsername, ok := config["admin_username"]; ok {
+	if adminUsername, exists := config.GetString("admin_username"); exists {
 		v.adminUsername = adminUsername
 	}
-	if adminPassword, ok := config["admin_password"]; ok {
+	if adminPassword, exists := config.GetString("admin_password"); exists {
 		v.adminPassword = adminPassword
 	}
-	if skipTLSVerify, ok := config["skip_tls_verify"]; ok {
+	if skipTLSVerify, exists := config.GetString("skip_tls_verify"); exists {
 		v.skipTLSVerify = skipTLSVerify == "true"
 	}
 }

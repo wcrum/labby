@@ -37,13 +37,13 @@ func (v *PaletteProjectService) ConfigureFromServiceConfig(serviceConfig *models
 	v.serviceConfig = serviceConfig
 
 	// Override environment variables with service config values
-	if host, ok := serviceConfig.Config["host"]; ok {
+	if host, exists := serviceConfig.Config.GetString("host"); exists {
 		v.host = host
 	}
-	if apiKey, ok := serviceConfig.Config["api_key"]; ok {
+	if apiKey, exists := serviceConfig.Config.GetString("api_key"); exists {
 		v.apiKey = apiKey
 	}
-	if projectUID, ok := serviceConfig.Config["project_uid"]; ok {
+	if projectUID, exists := serviceConfig.Config.GetString("project_uid"); exists {
 		v.projectUID = projectUID
 	}
 }

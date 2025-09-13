@@ -33,17 +33,17 @@ func NewProxmoxUserService() *ProxmoxUserService {
 }
 
 // ConfigureFromServiceConfig configures the service from a service configuration
-func (v *ProxmoxUserService) ConfigureFromServiceConfig(config map[string]string) {
-	if uri, ok := config["uri"]; ok {
+func (v *ProxmoxUserService) ConfigureFromServiceConfig(config models.ServiceConfigMap) {
+	if uri, exists := config.GetString("uri"); exists {
 		v.uri = uri
 	}
-	if adminUser, ok := config["admin_user"]; ok {
+	if adminUser, exists := config.GetString("admin_user"); exists {
 		v.adminUser = adminUser
 	}
-	if adminPass, ok := config["admin_pass"]; ok {
+	if adminPass, exists := config.GetString("admin_pass"); exists {
 		v.adminPass = adminPass
 	}
-	if skipTLSVerify, ok := config["skip_tls_verify"]; ok {
+	if skipTLSVerify, exists := config.GetString("skip_tls_verify"); exists {
 		v.skipTLSVerify = skipTLSVerify == "true"
 	}
 }

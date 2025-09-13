@@ -31,13 +31,13 @@ func NewPaletteTenantService() *PaletteTenantService {
 
 // ConfigureFromServiceConfig configures the service with credentials from service config
 func (v *PaletteTenantService) ConfigureFromServiceConfig(serviceConfig *models.ServiceConfig) {
-	if host, ok := serviceConfig.Config["palette_host"]; ok {
+	if host, exists := serviceConfig.Config.GetString("palette_host"); exists {
 		v.host = host
 	}
-	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
+	if systemUsername, exists := serviceConfig.Config.GetString("palette_system_username"); exists {
 		v.systemUsername = systemUsername
 	}
-	if systemPassword, ok := serviceConfig.Config["palette_system_password"]; ok {
+	if systemPassword, exists := serviceConfig.Config.GetString("palette_system_password"); exists {
 		v.systemPassword = systemPassword
 	}
 }

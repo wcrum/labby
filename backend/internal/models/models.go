@@ -41,6 +41,112 @@ func (sm *StringMap) Scan(value interface{}) error {
 	return json.Unmarshal(bytes, sm)
 }
 
+// ServiceConfigMap represents a flexible configuration that can handle both flat and nested structures
+type ServiceConfigMap map[string]interface{}
+
+// Value implements the driver.Valuer interface
+func (scm ServiceConfigMap) Value() (driver.Value, error) {
+	if scm == nil {
+		return "{}", nil
+	}
+	return json.Marshal(scm)
+}
+
+// Scan implements the sql.Scanner interface
+func (scm *ServiceConfigMap) Scan(value interface{}) error {
+	if value == nil {
+		*scm = make(ServiceConfigMap)
+		return nil
+	}
+
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return fmt.Errorf("cannot scan %T into ServiceConfigMap", value)
+	}
+
+	return json.Unmarshal(bytes, scm)
+}
+
+// GetString gets a string value from the config map, supporting dot notation for nested access
+func (scm ServiceConfigMap) GetString(key string) (string, bool) {
+	value, exists := scm.getNestedValue(key)
+	if !exists {
+		return "", false
+	}
+
+	str, ok := value.(string)
+	return str, ok
+}
+
+// GetStringMap gets a map[string]string from the config map, supporting dot notation for nested access
+func (scm ServiceConfigMap) GetStringMap(key string) (map[string]string, bool) {
+	value, exists := scm.getNestedValue(key)
+	if !exists {
+		return nil, false
+	}
+
+	// Handle direct map[string]string
+	if strMap, ok := value.(map[string]string); ok {
+		return strMap, true
+	}
+
+	// Handle map[string]interface{} and convert to map[string]string
+	if interfaceMap, ok := value.(map[string]interface{}); ok {
+		result := make(map[string]string)
+		for k, v := range interfaceMap {
+			if str, ok := v.(string); ok {
+				result[k] = str
+			}
+		}
+		return result, true
+	}
+
+	return nil, false
+}
+
+// getNestedValue gets a value from the config map, supporting dot notation for nested access
+func (scm ServiceConfigMap) getNestedValue(key string) (interface{}, bool) {
+	// Handle direct key access first
+	if value, exists := scm[key]; exists {
+		return value, true
+	}
+
+	// Handle dot notation for nested access
+	parts := strings.Split(key, ".")
+	if len(parts) == 1 {
+		return nil, false
+	}
+
+	current := scm
+	for i, part := range parts[:len(parts)-1] {
+		value, exists := current[part]
+		if !exists {
+			return nil, false
+		}
+
+		nextMap, ok := value.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+
+		current = ServiceConfigMap(nextMap)
+		if i == len(parts)-2 {
+			// Last iteration, get the final value
+			finalKey := parts[len(parts)-1]
+			if finalValue, exists := current[finalKey]; exists {
+				return finalValue, true
+			}
+		}
+	}
+
+	return nil, false
+}
+
 // StringArray represents a []string that can be stored as PostgreSQL text[]
 type StringArray []string
 
@@ -242,15 +348,15 @@ type ServiceLimit struct {
 
 // ServiceConfig represents a preconfigured service configuration
 type ServiceConfig struct {
-	ID          string    `json:"id" yaml:"id" gorm:"primaryKey"`
-	Name        string    `json:"name" yaml:"name" gorm:"not null"`
-	Type        string    `json:"type" yaml:"type" gorm:"not null;index"` // palette_project, palette_tenant, proxmox_user
-	Description string    `json:"description" yaml:"description"`
-	Logo        string    `json:"logo" yaml:"logo"`                                              // Path to logo file (SVG/PNG)
-	Config      StringMap `json:"config" yaml:"config" gorm:"type:jsonb;not null;default:'{}'"`  // Service-specific configuration
-	IsActive    bool      `json:"is_active" yaml:"is_active" gorm:"not null;default:true;index"` // Whether this service config is available
-	CreatedAt   time.Time `json:"created_at" yaml:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" yaml:"updated_at"`
+	ID          string           `json:"id" yaml:"id" gorm:"primaryKey"`
+	Name        string           `json:"name" yaml:"name" gorm:"not null"`
+	Type        string           `json:"type" yaml:"type" gorm:"not null;index"` // palette_project, palette_tenant, proxmox_user
+	Description string           `json:"description" yaml:"description"`
+	Logo        string           `json:"logo" yaml:"logo"`                                              // Path to logo file (SVG/PNG)
+	Config      ServiceConfigMap `json:"config" yaml:"config" gorm:"type:jsonb;not null;default:'{}'"`  // Service-specific configuration
+	IsActive    bool             `json:"is_active" yaml:"is_active" gorm:"not null;default:true;index"` // Whether this service config is available
+	CreatedAt   time.Time        `json:"created_at" yaml:"created_at"`
+	UpdatedAt   time.Time        `json:"updated_at" yaml:"updated_at"`
 }
 
 // ServiceUsage represents current usage of a service
