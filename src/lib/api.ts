@@ -449,9 +449,9 @@ class ApiService {
   // Simplified cleanup by lab UUID only - auto-constructs all resource names
   async cleanupByLab(labId: string): Promise<{
     message: string;
-    lab_id: string;
-    results: Record<string, string>;
-    errors: Record<string, string>;
+    lab_ids: string[];
+    results: Record<string, Record<string, string>>;
+    errors: Record<string, Record<string, string>>;
     successful: number;
     failed: number;
   }> {
@@ -466,8 +466,11 @@ class ApiService {
     message: string;
     service_config_id: string;
     service_type: string;
-    lab_id: string;
-    auto_constructed_resources: Record<string, string>;
+    lab_ids: string[];
+    results: Record<string, { message: string; auto_constructed_resources: Record<string, string> }>;
+    errors: Record<string, string>;
+    successful: number;
+    failed: number;
   }> {
     return this.request('/api/admin/cleanup/service-by-id', {
       method: 'POST',

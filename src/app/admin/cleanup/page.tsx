@@ -41,7 +41,7 @@ interface ServiceType {
 interface CleanupHistoryItem {
   id: string;
   serviceType: string;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'partial';
   message: string;
   timestamp: Date;
   parameters?: Record<string, string>;
@@ -96,7 +96,10 @@ function CleanupPageContent() {
       return;
     }
 
-    const message = `Are you sure you want to cleanup service config "${serviceConfigId}" for lab "${labId.trim()}"? This will permanently delete resources and cannot be undone.`;
+    const labIds = labId.trim().split(',').map(id => id.trim()).filter(id => id.length > 0);
+    const message = labIds.length === 1 
+      ? `Are you sure you want to cleanup service config "${serviceConfigId}" for lab "${labIds[0]}"? This will permanently delete resources and cannot be undone.`
+      : `Are you sure you want to cleanup service config "${serviceConfigId}" for ${labIds.length} labs (${labIds.join(', ')})? This will permanently delete resources and cannot be undone.`;
     setConfirmMessage(message);
     setShowConfirmDialog(true);
   };
@@ -108,14 +111,20 @@ function CleanupPageContent() {
 
     try {
       const response = await apiService.cleanupServiceByID(serviceConfigId, labId.trim());
-      setCleanupMessage(response.message);
+      
+      // Format success message based on results
+      let successMessage = response.message;
+      if (response.failed > 0) {
+        successMessage += ` (${response.successful} successful, ${response.failed} failed)`;
+      }
+      setCleanupMessage(successMessage);
 
       // Add to history
       setCleanupHistory(prev => [{
         id: Date.now().toString(),
         serviceType: response.service_type,
-        status: 'success',
-        message: response.message,
+        status: response.failed > 0 ? 'partial' : 'success',
+        message: successMessage,
         timestamp: new Date(),
         parameters: { lab_id: labId.trim(), service_config_id: serviceConfigId }
       }, ...prev]);
@@ -208,15 +217,15 @@ function CleanupPageContent() {
 
                 {/* Lab ID */}
                 <div className="space-y-2">
-                  <Label htmlFor="lab-id">Lab UUID *</Label>
+                  <Label htmlFor="lab-id">Lab UUID(s) *</Label>
                   <Input
                     id="lab-id"
-                    placeholder="Enter lab UUID (e.g., abc123)"
+                    placeholder="Enter lab UUID(s) - single UUID or comma-delimited (e.g., abc123 or abc123,def456,ghi789)"
                     value={labId}
                     onChange={(e) => setLabId(e.target.value)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Resource names will be auto-constructed from this lab UUID
+                    Resource names will be auto-constructed from each lab UUID. Supports multiple UUIDs separated by commas for bulk cleanup.
                   </p>
                 </div>
 
@@ -273,15 +282,25 @@ function CleanupPageContent() {
 
         {/* Status Message */}
         {cleanupMessage && (
-          <Card className={`rounded-xl ${cleanupMessage.includes('failed') || cleanupMessage.includes('error') ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+          <Card className={`rounded-xl ${
+            cleanupMessage.includes('failed') || cleanupMessage.includes('error') ? 'border-red-200 bg-red-50' : 
+            cleanupMessage.includes('successful') && cleanupMessage.includes('failed') ? 'border-yellow-200 bg-yellow-50' :
+            'border-green-200 bg-green-50'
+          }`}>
             <CardContent className="pt-6">
               <div className="flex items-center gap-2">
                 {cleanupMessage.includes('failed') || cleanupMessage.includes('error') ? (
                   <AlertTriangle className="h-4 w-4 text-red-600" />
+                ) : cleanupMessage.includes('successful') && cleanupMessage.includes('failed') ? (
+                  <AlertTriangle className="h-4 w-4 text-yellow-600" />
                 ) : (
                   <CheckCircle className="h-4 w-4 text-green-600" />
                 )}
-                <p className={`text-sm ${cleanupMessage.includes('failed') || cleanupMessage.includes('error') ? 'text-red-800' : 'text-green-800'}`}>
+                <p className={`text-sm ${
+                  cleanupMessage.includes('failed') || cleanupMessage.includes('error') ? 'text-red-800' : 
+                  cleanupMessage.includes('successful') && cleanupMessage.includes('failed') ? 'text-yellow-800' :
+                  'text-green-800'
+                }`}>
                   {cleanupMessage}
                 </p>
               </div>
@@ -304,11 +323,15 @@ function CleanupPageContent() {
                   <div
                     key={item.id}
                     className={`flex items-start gap-3 p-3 rounded-lg border ${
-                      item.status === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                      item.status === 'success' ? 'border-green-200 bg-green-50' : 
+                      item.status === 'partial' ? 'border-yellow-200 bg-yellow-50' : 
+                      'border-red-200 bg-red-50'
                     }`}
                   >
                     {item.status === 'success' ? (
                       <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
+                    ) : item.status === 'partial' ? (
+                      <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5" />
                     ) : (
                       <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5" />
                     )}
@@ -321,7 +344,11 @@ function CleanupPageContent() {
                           {item.timestamp.toLocaleString()}
                         </span>
                       </div>
-                      <p className={`text-sm ${item.status === 'success' ? 'text-green-800' : 'text-red-800'}`}>
+                      <p className={`text-sm ${
+                        item.status === 'success' ? 'text-green-800' : 
+                        item.status === 'partial' ? 'text-yellow-800' : 
+                        'text-red-800'
+                      }`}>
                         {item.message}
                       </p>
                       {item.parameters && Object.keys(item.parameters).length > 0 && (

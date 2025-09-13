@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
@@ -437,7 +438,7 @@ func (h *Handler) AdminGetAvailableServices(c *gin.Context) {
 
 // AdminCleanupServiceByID handles cleanup for a specific service config by ID and lab UUID (admin only)
 // @Summary Cleanup a specific service config for a lab by UUID (admin)
-// @Description Clean up resources for a specific service config using the service config ID and lab UUID - automatically constructs all resource names (admin only)
+// @Description Clean up resources for a specific service config using the service config ID and lab UUID - automatically constructs all resource names (admin only). Supports comma-delimited UUIDs for bulk cleanup.
 // @Tags admin
 // @Accept json
 // @Produce json
@@ -464,6 +465,16 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 	if req.LabID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "lab_id is required"})
 		return
+	}
+
+	// Parse comma-delimited UUIDs
+	labIDs := strings.Split(req.LabID, ",")
+	for i, labID := range labIDs {
+		labIDs[i] = strings.TrimSpace(labID)
+		if labIDs[i] == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "empty lab_id found in comma-delimited list"})
+			return
+		}
 	}
 
 	// Get service manager
@@ -495,7 +506,8 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 		ConfigureFromServiceConfig(models.ServiceConfigMap, string)
 	}:
 		// Services that take (ServiceConfigMap, string) (terraform_cloud)
-		s.ConfigureFromServiceConfig(serviceConfig.Config, req.LabID)
+		// For multiple lab IDs, we'll configure with the first one for the service setup
+		s.ConfigureFromServiceConfig(serviceConfig.Config, labIDs[0])
 	case interface {
 		ConfigureFromServiceConfig(models.ServiceConfigMap)
 	}:
@@ -503,44 +515,72 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 		s.ConfigureFromServiceConfig(serviceConfig.Config)
 	}
 
-	// Create cleanup context with auto-constructed parameters
-	cleanupCtx := &interfaces.CleanupContext{
-		LabID:   req.LabID,
-		Context: c.Request.Context(),
-		Lab:     nil, // No lab instance for admin cleanup
+	// Track cleanup results for all lab IDs
+	allResults := make(map[string]interface{})
+	allErrors := make(map[string]interface{})
+	totalSuccessful := 0
+	totalFailed := 0
+
+	// Process each lab ID
+	for _, labID := range labIDs {
+		// Create cleanup context with auto-constructed parameters
+		cleanupCtx := &interfaces.CleanupContext{
+			LabID:   labID,
+			Context: c.Request.Context(),
+			Lab:     nil, // No lab instance for admin cleanup
+		}
+
+		// Auto-construct parameters based on service type
+		switch serviceConfig.Type {
+		case "palette_project":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", labID))
+		case "palette_tenant":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", labID))
+		case "proxmox_user":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", labID))
+		case "terraform_cloud":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", labID))
+		case "guacamole":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", labID))
+		}
+
+		// Execute cleanup
+		err := service.ExecuteCleanup(cleanupCtx)
+		if err != nil {
+			allErrors[labID] = err.Error()
+			totalFailed++
+		} else {
+			allResults[labID] = map[string]interface{}{
+				"message":                    fmt.Sprintf("Service config '%s' cleanup completed successfully", req.ServiceConfigID),
+				"auto_constructed_resources": getAutoConstructedResources(serviceConfig.Type, labID),
+			}
+			totalSuccessful++
+		}
 	}
 
-	// Auto-construct parameters based on service type
-	switch serviceConfig.Type {
-	case "palette_project":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", req.LabID))
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", req.LabID))
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", req.LabID))
-	case "palette_tenant":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", req.LabID))
-	case "proxmox_user":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", req.LabID))
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", req.LabID))
-	case "terraform_cloud":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", req.LabID))
-	case "guacamole":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", req.LabID))
+	// Prepare response
+	response := gin.H{
+		"message":           fmt.Sprintf("Service config '%s' cleanup completed for %d lab(s)", req.ServiceConfigID, len(labIDs)),
+		"service_config_id": req.ServiceConfigID,
+		"service_type":      serviceConfig.Type,
+		"lab_ids":           labIDs,
+		"results":           allResults,
+		"errors":            allErrors,
+		"successful":        totalSuccessful,
+		"failed":            totalFailed,
 	}
 
-	// Execute cleanup
-	err = service.ExecuteCleanup(cleanupCtx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup service config '%s': %v", req.ServiceConfigID, err)})
-		return
+	// Determine HTTP status
+	if totalFailed > 0 && totalSuccessful == 0 {
+		c.JSON(http.StatusInternalServerError, response)
+	} else if totalFailed > 0 {
+		c.JSON(http.StatusPartialContent, response)
+	} else {
+		c.JSON(http.StatusOK, response)
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":                    fmt.Sprintf("Service config '%s' cleanup completed successfully", req.ServiceConfigID),
-		"service_config_id":          req.ServiceConfigID,
-		"service_type":               serviceConfig.Type,
-		"lab_id":                     req.LabID,
-		"auto_constructed_resources": getAutoConstructedResources(serviceConfig.Type, req.LabID),
-	})
 }
 
 // getAutoConstructedResources returns the list of auto-constructed resource names for a service type
@@ -568,7 +608,7 @@ func getAutoConstructedResources(serviceType, labID string) map[string]string {
 
 // AdminCleanupByLab handles simplified cleanup by lab UUID only (admin only)
 // @Summary Cleanup all services for a lab by UUID (admin)
-// @Description Clean up all resources for a lab using just the lab UUID - automatically constructs all resource names (admin only)
+// @Description Clean up all resources for a lab using just the lab UUID - automatically constructs all resource names (admin only). Supports comma-delimited UUIDs for bulk cleanup.
 // @Tags admin
 // @Accept json
 // @Produce json
@@ -593,6 +633,16 @@ func (h *Handler) AdminCleanupByLab(c *gin.Context) {
 		return
 	}
 
+	// Parse comma-delimited UUIDs
+	labIDs := strings.Split(req.LabID, ",")
+	for i, labID := range labIDs {
+		labIDs[i] = strings.TrimSpace(labID)
+		if labIDs[i] == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "empty lab_id found in comma-delimited list"})
+			return
+		}
+	}
+
 	// Get service manager
 	serviceManager := services.NewServiceManager(h.repo)
 
@@ -607,77 +657,95 @@ func (h *Handler) AdminCleanupByLab(c *gin.Context) {
 		serviceTypes[config.Type] = true
 	}
 
-	// Track cleanup results
-	results := make(map[string]interface{})
-	errors := make(map[string]string)
+	// Track cleanup results for all lab IDs
+	allResults := make(map[string]interface{})
+	allErrors := make(map[string]interface{})
+	totalSuccessful := 0
+	totalFailed := 0
 
-	// Cleanup each service type
-	for serviceType := range serviceTypes {
-		service, exists := serviceManager.GetServiceByType(serviceType)
-		if !exists {
-			errors[serviceType] = "Service not available"
-			continue
-		}
+	// Process each lab ID
+	for _, labID := range labIDs {
+		labResults := make(map[string]interface{})
+		labErrors := make(map[string]string)
 
-		// Configure service with service config if available
-		for _, config := range serviceConfigs {
-			if config.Type == serviceType && config.IsActive {
-				if configurableService, ok := service.(interface {
-					ConfigureFromServiceConfig(*models.ServiceConfig)
-				}); ok {
-					configurableService.ConfigureFromServiceConfig(config)
+		// Cleanup each service type for this lab ID
+		for serviceType := range serviceTypes {
+			service, exists := serviceManager.GetServiceByType(serviceType)
+			if !exists {
+				labErrors[serviceType] = "Service not available"
+				continue
+			}
+
+			// Configure service with service config if available
+			for _, config := range serviceConfigs {
+				if config.Type == serviceType && config.IsActive {
+					if configurableService, ok := service.(interface {
+						ConfigureFromServiceConfig(*models.ServiceConfig)
+					}); ok {
+						configurableService.ConfigureFromServiceConfig(config)
+					}
+					break
 				}
-				break
+			}
+
+			// Create cleanup context with auto-constructed parameters
+			cleanupCtx := &interfaces.CleanupContext{
+				LabID:   labID,
+				Context: c.Request.Context(),
+				Lab:     nil, // No lab instance for admin cleanup
+			}
+
+			// Auto-construct common parameters based on service type
+			switch serviceType {
+			case "palette_project":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", labID))
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", labID))
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", labID))
+			case "palette_tenant":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", labID))
+			case "proxmox_user":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", labID))
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", labID))
+			case "terraform_cloud":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", labID))
+			case "guacamole":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", labID))
+			}
+
+			// Execute cleanup
+			err := service.ExecuteCleanup(cleanupCtx)
+			if err != nil {
+				labErrors[serviceType] = err.Error()
+			} else {
+				labResults[serviceType] = "Cleanup completed successfully"
 			}
 		}
 
-		// Create cleanup context with auto-constructed parameters
-		cleanupCtx := &interfaces.CleanupContext{
-			LabID:   req.LabID,
-			Context: c.Request.Context(),
-			Lab:     nil, // No lab instance for admin cleanup
+		// Store results for this lab ID
+		if len(labResults) > 0 {
+			allResults[labID] = labResults
+			totalSuccessful += len(labResults)
 		}
-
-		// Auto-construct common parameters based on service type
-		switch serviceType {
-		case "palette_project":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", req.LabID))
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", req.LabID))
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", req.LabID))
-		case "palette_tenant":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", req.LabID))
-		case "proxmox_user":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", req.LabID))
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", req.LabID))
-		case "terraform_cloud":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", req.LabID))
-		case "guacamole":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", req.LabID))
-		}
-
-		// Execute cleanup
-		err := service.ExecuteCleanup(cleanupCtx)
-		if err != nil {
-			errors[serviceType] = err.Error()
-		} else {
-			results[serviceType] = "Cleanup completed successfully"
+		if len(labErrors) > 0 {
+			allErrors[labID] = labErrors
+			totalFailed += len(labErrors)
 		}
 	}
 
 	// Prepare response
 	response := gin.H{
-		"message":    "Lab cleanup completed",
-		"lab_id":     req.LabID,
-		"results":    results,
-		"errors":     errors,
-		"successful": len(results),
-		"failed":     len(errors),
+		"message":    fmt.Sprintf("Lab cleanup completed for %d lab(s)", len(labIDs)),
+		"lab_ids":    labIDs,
+		"results":    allResults,
+		"errors":     allErrors,
+		"successful": totalSuccessful,
+		"failed":     totalFailed,
 	}
 
 	// Determine HTTP status
-	if len(errors) > 0 && len(results) == 0 {
+	if totalFailed > 0 && totalSuccessful == 0 {
 		c.JSON(http.StatusInternalServerError, response)
-	} else if len(errors) > 0 {
+	} else if totalFailed > 0 {
 		c.JSON(http.StatusPartialContent, response)
 	} else {
 		c.JSON(http.StatusOK, response)
