@@ -43,8 +43,8 @@ func (v *ProxmoxUserService) ConfigureFromServiceConfig(config models.ServiceCon
 	if adminPass, exists := config.GetString("admin_pass"); exists {
 		v.adminPass = adminPass
 	}
-	if skipTLSVerify, exists := config.GetString("skip_tls_verify"); exists {
-		v.skipTLSVerify = skipTLSVerify == "true"
+	if skipTLSVerify, exists := config.GetBool("skip_tls_verify"); exists {
+		v.skipTLSVerify = skipTLSVerify
 	}
 }
 
@@ -461,7 +461,7 @@ func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) erro
 		skipTLSVerify = skipTLSVerifyStr == "true"
 	}
 
-	// Fallback to environment variables if not in ServiceData
+	// Fallback to service configuration if not in ServiceData
 	if uri == "" {
 		uri = v.uri
 	}
@@ -470,6 +470,10 @@ func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) erro
 	}
 	if adminPass == "" {
 		adminPass = v.adminPass
+	}
+	// Note: skipTLSVerify defaults to false if not found in ServiceData, so we use the service's configured value
+	if ctx.Lab == nil || ctx.Lab.ServiceData == nil || ctx.Lab.ServiceData["proxmox_skip_tls_verify"] == "" {
+		skipTLSVerify = v.skipTLSVerify
 	}
 
 	// Validate required configuration

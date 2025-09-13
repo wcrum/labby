@@ -43,8 +43,8 @@ func (v *GuacamoleService) ConfigureFromServiceConfig(config models.ServiceConfi
 	if adminPassword, exists := config.GetString("admin_password"); exists {
 		v.adminPassword = adminPassword
 	}
-	if skipTLSVerify, exists := config.GetString("skip_tls_verify"); exists {
-		v.skipTLSVerify = skipTLSVerify == "true"
+	if skipTLSVerify, exists := config.GetBool("skip_tls_verify"); exists {
+		v.skipTLSVerify = skipTLSVerify
 	}
 }
 

@@ -83,6 +83,31 @@ func (scm ServiceConfigMap) GetString(key string) (string, bool) {
 	return str, ok
 }
 
+// GetBool gets a boolean value from the config map, supporting dot notation for nested access
+func (scm ServiceConfigMap) GetBool(key string) (bool, bool) {
+	value, exists := scm.getNestedValue(key)
+	if !exists {
+		return false, false
+	}
+
+	// Handle direct boolean
+	if b, ok := value.(bool); ok {
+		return b, true
+	}
+
+	// Handle string representations
+	if str, ok := value.(string); ok {
+		switch strings.ToLower(str) {
+		case "true", "1", "yes", "on":
+			return true, true
+		case "false", "0", "no", "off":
+			return false, true
+		}
+	}
+
+	return false, false
+}
+
 // GetStringMap gets a map[string]string from the config map, supporting dot notation for nested access
 func (scm ServiceConfigMap) GetStringMap(key string) (map[string]string, bool) {
 	value, exists := scm.getNestedValue(key)
