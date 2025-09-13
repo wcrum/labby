@@ -17,6 +17,7 @@ import (
 
 	"github.com/wcrum/labby/internal/interfaces"
 	"github.com/wcrum/labby/internal/models"
+	"gopkg.in/yaml.v3"
 )
 
 // TerraformCloudService handles setup and cleanup for Terraform Cloud workspaces
@@ -124,68 +125,18 @@ func (v *TerraformCloudService) processTemplateString(value string, labID string
 // ConfigureFromServiceConfig configures the service from a service configuration
 func (v *TerraformCloudService) ConfigureFromServiceConfig(config map[string]string, labID string) {
 	// Debug logging
-	fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: Received config with %d keys: %v\n", len(config), config)
+	fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: Received config with %d keys\n", len(config))
 
-	// Set basic configuration
-	if host, ok := config["host"]; ok {
-		v.host = host
-		fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: Set host to: %s\n", host)
-	} else {
-		fmt.Printf("TerraformCloudService.ConfigureFromServiceConfig: WARNING - host key not found in config\n")
-	}
-	if apiToken, ok := config["api_token"]; ok {
-		v.apiToken = apiToken
-	}
-	if organization, ok := config["organization"]; ok {
-		v.organization = organization
+	// Parse the config using YAML parsing directly into the service struct
+	err := v.parseConfigFromYAML(config, labID)
+	if err != nil {
+		fmt.Printf("TerraformCloudService: Error parsing config: %v\n", err)
+		return
 	}
 
-	// Set source directory
-	if sourceDir, ok := config["source_directory"]; ok {
-		v.sourceDirectory = sourceDir
-	}
-
-	// Set agent pool ID and execution mode
-	if agentPoolID, ok := config["agent_pool_id"]; ok {
-		v.agentPoolID = agentPoolID
-		fmt.Printf("TerraformCloudService: Agent pool ID set to: %s\n", agentPoolID)
-	}
-	if executionMode, ok := config["execution_mode"]; ok {
-		v.executionMode = executionMode
-		fmt.Printf("TerraformCloudService: Execution mode set to: %s\n", executionMode)
-	}
-
-	// Extract variables from flat YAML structure
-	// Define which keys should be treated as Terraform variables
-	terraformVariableKeys := []string{
-		"pm_api_url",
-		"pm_node",
-		"template_name",
-		"storage_pool",
-		"network_bridge",
-		"vm_user",
-		"vm_password",
-		"ubuntu_iso",
-		"resource_pool",
-		"vlan_tag",
-		"lab_id",
-		// Add any other variables that should be passed to Terraform
-	}
-
-	// Extract regular variables
-	for key, value := range config {
-		for _, varKey := range terraformVariableKeys {
-			if key == varKey {
-				// Process template strings for all variables
-				processedValue := v.processTemplateString(value, labID)
-				v.variables[key] = processedValue
-				if value != processedValue {
-					fmt.Printf("TerraformCloudService: Processed variable %s: '%s' -> '%s'\n", key, value, processedValue)
-				}
-				break
-			}
-		}
-	}
+	fmt.Printf("TerraformCloudService: Set host to: %s\n", v.host)
+	fmt.Printf("TerraformCloudService: Agent pool ID set to: %s\n", v.agentPoolID)
+	fmt.Printf("TerraformCloudService: Execution mode set to: %s\n", v.executionMode)
 
 	// Calculate IP octet from VLAN tag if both exist
 	if vlanTagStr, exists := v.variables["vlan_tag"]; exists {
@@ -198,36 +149,6 @@ func (v *TerraformCloudService) ConfigureFromServiceConfig(config map[string]str
 		}
 	}
 
-	// Extract sensitive variables
-	sensitiveVariableKeys := []string{
-		"pm_api_token_id",
-		"pm_api_token_secret",
-		"ssh_key",
-	}
-
-	for key, value := range config {
-		for _, varKey := range sensitiveVariableKeys {
-			if key == varKey {
-				// Process template strings for sensitive variables too
-				processedValue := v.processTemplateString(value, labID)
-				v.sensitiveVars[key] = processedValue
-				break
-			}
-		}
-	}
-
-	// Also check for nested structure for backward compatibility
-	for key, value := range config {
-		if strings.HasPrefix(key, "terraform_config.variables.") {
-			varName := strings.TrimPrefix(key, "terraform_config.variables.")
-			v.variables[varName] = value
-		}
-		if strings.HasPrefix(key, "terraform_config.sensitive_variables.") {
-			varName := strings.TrimPrefix(key, "terraform_config.sensitive_variables.")
-			v.sensitiveVars[varName] = value
-		}
-	}
-
 	// Debug logging
 	fmt.Printf("TerraformCloudService: Extracted %d regular variables: %v\n", len(v.variables), v.variables)
 	fmt.Printf("TerraformCloudService: Extracted %d sensitive variables: %v\n", len(v.sensitiveVars), v.sensitiveVars)
@@ -236,6 +157,95 @@ func (v *TerraformCloudService) ConfigureFromServiceConfig(config map[string]str
 	if vlanTag, exists := v.variables["vlan_tag"]; exists {
 		fmt.Printf("TerraformCloudService: VLAN tag set to: %s\n", vlanTag)
 	}
+}
+
+// parseConfigFromYAML reconstructs the YAML structure from the flattened config and parses it directly into the service
+func (v *TerraformCloudService) parseConfigFromYAML(config map[string]string, labID string) error {
+	// Reconstruct the YAML structure by grouping keys
+	yamlData := make(map[string]interface{})
+	variables := make(map[string]string)
+	secrets := make(map[string]string)
+
+	// Define terraform cloud configuration keys
+	terraformCloudKeys := map[string]bool{
+		"host":             true,
+		"api_token":        true,
+		"organization":     true,
+		"source_directory": true,
+		"agent_pool_id":    true,
+		"execution_mode":   true,
+	}
+
+	// Categorize keys based on naming convention
+	for key, value := range config {
+		if terraformCloudKeys[key] {
+			yamlData[key] = value
+		} else {
+			// Check if key indicates a secret based on naming convention
+			keyLower := strings.ToLower(key)
+			isSecret := strings.Contains(keyLower, "token") ||
+				strings.Contains(keyLower, "secret") ||
+				strings.Contains(keyLower, "key") ||
+				strings.Contains(keyLower, "password")
+
+			if isSecret {
+				secrets[key] = value
+			} else {
+				variables[key] = value
+			}
+		}
+	}
+
+	// Add the nested structures
+	yamlData["variables"] = variables
+	yamlData["secrets"] = secrets
+
+	// Convert to YAML and parse it properly
+	yamlBytes, err := yaml.Marshal(yamlData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config to YAML: %w", err)
+	}
+
+	// Create a temporary struct to parse the YAML
+	type tempConfig struct {
+		Host            string            `yaml:"host"`
+		APIToken        string            `yaml:"api_token"`
+		Organization    string            `yaml:"organization"`
+		AgentPoolID     string            `yaml:"agent_pool_id"`
+		ExecutionMode   string            `yaml:"execution_mode"`
+		SourceDirectory string            `yaml:"source_directory"`
+		Variables       map[string]string `yaml:"variables"`
+		Secrets         map[string]string `yaml:"secrets"`
+	}
+
+	var temp tempConfig
+	if err := yaml.Unmarshal(yamlBytes, &temp); err != nil {
+		return fmt.Errorf("failed to unmarshal YAML config: %w", err)
+	}
+
+	// Populate the service struct directly
+	v.host = temp.Host
+	v.apiToken = temp.APIToken
+	v.organization = temp.Organization
+	v.sourceDirectory = temp.SourceDirectory
+	v.agentPoolID = temp.AgentPoolID
+	v.executionMode = temp.ExecutionMode
+
+	// Process variables and secrets with template string processing
+	for key, value := range temp.Variables {
+		processedValue := v.processTemplateString(value, labID)
+		v.variables[key] = processedValue
+		if value != processedValue {
+			fmt.Printf("TerraformCloudService: Processed variable %s: '%s' -> '%s'\n", key, value, processedValue)
+		}
+	}
+
+	for key, value := range temp.Secrets {
+		processedValue := v.processTemplateString(value, labID)
+		v.sensitiveVars[key] = processedValue
+	}
+
+	return nil
 }
 
 // GetName returns the service name
