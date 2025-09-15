@@ -1030,3 +1030,130 @@ func (h *Handler) DeleteServiceLimit(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// GetPendingLabs handles getting all pending labs (admin only)
+// @Summary Get pending labs (admin)
+// @Description Get all labs that are pending approval (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} models.LabResponse
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/labs/pending [get]
+func (h *Handler) GetPendingLabs(c *gin.Context) {
+	fmt.Printf("GetPendingLabs: Admin request received\n")
+
+	// Get user from context
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Printf("GetPendingLabs: No user found in context\n")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	fmt.Printf("GetPendingLabs: User %s (role: %s) requesting pending labs\n", userObj.Email, userObj.Role)
+
+	pendingLabs, err := h.labService.GetPendingLabs()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve pending labs"})
+		return
+	}
+	fmt.Printf("GetPendingLabs: Found %d pending labs\n", len(pendingLabs))
+
+	// Convert Labs to LabResponses
+	labResponses := make([]*models.LabResponse, len(pendingLabs))
+	for i, lab := range pendingLabs {
+		labResponses[i] = h.labService.ConvertLabToResponse(lab, h.authService)
+	}
+
+	c.JSON(http.StatusOK, labResponses)
+}
+
+// ApproveLab handles approving a pending lab (admin only)
+// @Summary Approve lab (admin)
+// @Description Approve a pending lab and start provisioning (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Lab ID"
+// @Success 200 {object} map[string]interface{} "Lab approved"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 404 {object} map[string]interface{} "Lab not found"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/labs/{id}/approve [post]
+func (h *Handler) ApproveLab(c *gin.Context) {
+	labID := c.Param("id")
+	if labID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	fmt.Printf("ApproveLab: Admin request to approve lab %s\n", labID)
+
+	// Get user from context
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Printf("ApproveLab: No user found in context\n")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	fmt.Printf("ApproveLab: User %s (role: %s) approving lab %s\n", userObj.Email, userObj.Role, labID)
+
+	err := h.labService.ApproveLab(labID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to approve lab: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Lab approved successfully"})
+}
+
+// RejectLab handles rejecting a pending lab (admin only)
+// @Summary Reject lab (admin)
+// @Description Reject a pending lab (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Lab ID"
+// @Success 200 {object} map[string]interface{} "Lab rejected"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 404 {object} map[string]interface{} "Lab not found"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/labs/{id}/reject [post]
+func (h *Handler) RejectLab(c *gin.Context) {
+	labID := c.Param("id")
+	if labID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	fmt.Printf("RejectLab: Admin request to reject lab %s\n", labID)
+
+	// Get user from context
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Printf("RejectLab: No user found in context\n")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	fmt.Printf("RejectLab: User %s (role: %s) rejecting lab %s\n", userObj.Email, userObj.Role, labID)
+
+	err := h.labService.RejectLab(labID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reject lab: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Lab rejected successfully"})
+}

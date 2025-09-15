@@ -129,9 +129,16 @@ export default function LabsPage() {
                     <CardTitle className="text-lg">{template.name}</CardTitle>
                     <CardDescription>{template.description}</CardDescription>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {formatDuration(template.expiration_duration)}
-                  </Badge>
+                  <div className="flex flex-col gap-1">
+                    <Badge variant="outline" className="text-xs">
+                      {formatDuration(template.expiration_duration)}
+                    </Badge>
+                    {template.require_approval && (
+                      <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800 border-orange-200">
+                        Requires Approval
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -173,10 +180,10 @@ export default function LabsPage() {
                   {creatingLab === template.id ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creating Lab...
+                      {template.require_approval ? 'Requesting Lab...' : 'Creating Lab...'}
                     </>
                   ) : (
-                    'Start Lab'
+                    template.require_approval ? 'Request Lab' : 'Start Lab'
                   )}
                 </Button>
               </CardContent>

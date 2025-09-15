@@ -260,6 +260,7 @@ type User struct {
 type LabStatus string
 
 const (
+	LabStatusPending      LabStatus = "pending"
 	LabStatusProvisioning LabStatus = "provisioning"
 	LabStatusReady        LabStatus = "ready"
 	LabStatusError        LabStatus = "error"

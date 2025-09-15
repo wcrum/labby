@@ -52,7 +52,7 @@ export interface Lab {
 export interface LabResponse {
   id: string;
   name: string;
-  status: 'provisioning' | 'ready' | 'error' | 'expired';
+  status: 'pending' | 'provisioning' | 'ready' | 'error' | 'expired';
   owner: User;
   started_at: string;
   ends_at: string;
@@ -91,6 +91,7 @@ export interface LabTemplate {
   description: string;
   expiration_duration: string;
   owner: string;
+  require_approval: boolean;
   created_at: string;
   services: ServiceTemplate[];
 }
@@ -486,6 +487,22 @@ class ApiService {
   // Admin endpoints
   async getAllLabs(): Promise<LabResponse[]> {
     return this.request<LabResponse[]>('/api/admin/labs');
+  }
+
+  async getPendingLabs(): Promise<LabResponse[]> {
+    return this.request<LabResponse[]>('/api/admin/labs/pending');
+  }
+
+  async approveLab(labId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/admin/labs/${labId}/approve`, {
+      method: 'POST',
+    });
+  }
+
+  async rejectLab(labId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/admin/labs/${labId}/reject`, {
+      method: 'POST',
+    });
   }
 
 

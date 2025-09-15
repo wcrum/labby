@@ -26,7 +26,12 @@ import {
   Users,
   Activity,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  FlaskConical,
+  Check,
+  XSquare,
+  FlaskConicalOffIcon,
+  FlaskConicalOff,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { LabSession } from "@/types/lab";
@@ -63,6 +68,8 @@ function AdminPageContent() {
   const [serviceLimits, setServiceLimits] = useState<ServiceLimit[]>([]);
   const [showStopDialog, setShowStopDialog] = useState(false);
   const [selectedLab, setSelectedLab] = useState<LabSession | null>(null);
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject' | null>(null);
 
   const handleStopLab = async () => {
     if (!selectedLab) return;
@@ -79,6 +86,28 @@ function AdminPageContent() {
     } catch (error) {
       console.error('Failed to stop lab:', error);
       setError('Failed to stop lab');
+    }
+  };
+
+  const handleApprovalAction = async () => {
+    if (!selectedLab || !approvalAction) return;
+
+    try {
+      if (approvalAction === 'approve') {
+        await apiService.approveLab(selectedLab.id);
+      } else if (approvalAction === 'reject') {
+        await apiService.rejectLab(selectedLab.id);
+      }
+      
+      // Refresh the labs list
+      const data = await fetchAllLabSessions();
+      setLabs(data);
+      setShowApprovalDialog(false);
+      setSelectedLab(null);
+      setApprovalAction(null);
+    } catch (error) {
+      console.error(`Failed to ${approvalAction} lab:`, error);
+      setError(`Failed to ${approvalAction} lab`);
     }
   };
 
@@ -144,6 +173,7 @@ function AdminPageContent() {
 
   const stats = {
     total: labs.length,
+    pending: labs.filter(l => l.status === "pending").length,
     ready: labs.filter(l => l.status === "ready").length,
     provisioning: labs.filter(l => l.status === "provisioning").length,
     error: labs.filter(l => l.status === "error").length,
@@ -208,48 +238,59 @@ function AdminPageContent() {
         )}
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="rounded-xl">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <Card className="rounded-xl border-black dark:border-white">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Labs</p>
+                  <p className="text-sm font-medium text-black-foreground">Total Labs</p>
                   <p className="text-2xl font-bold">{stats.total}</p>
                 </div>
-                <Users className="h-8 w-8 text-muted-foreground" />
+                <FlaskConical className="h-8 w-8 text-black-foreground" />
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card className="rounded-xl border-green-600">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between ">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Ready</p>
+                  <p className="text-sm font-medium text-green-foreground">Ready</p>
                   <p className="text-2xl font-bold text-green-600">{stats.ready}</p>
                 </div>
-                <Activity className="h-8 w-8 text-green-600" />
+                <Check className="h-8 w-8 text-green-600" />
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card className="rounded-xl border-blue-600">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Provisioning</p>
+                  <p className="text-sm font-medium text-blue-foreground">Provisioning</p>
                   <p className="text-2xl font-bold text-blue-600">{stats.provisioning}</p>
                 </div>
                 <RefreshCw className="h-8 w-8 text-blue-600" />
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card className="rounded-xl border-orange-600">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Errors & Expired</p>
+                  <p className="text-sm font-medium text-orange-foreground">Pending</p>
+                  <p className="text-2xl font-bold text-orange-600">{stats.pending}</p>
+                </div>
+                <AlertTriangle className="h-8 w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-xl border-red-600">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-foreground">Errors & Expired</p>
                   <p className="text-2xl font-bold text-red-600">{stats.error + stats.expired}</p>
                 </div>
-                <ShieldCheck className="h-8 w-8 text-red-600" />
+                <FlaskConicalOff className="h-8 w-8 text-red-600" />
               </div>
             </CardContent>
           </Card>
@@ -353,7 +394,12 @@ function AdminPageContent() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
                       <h3 className="text-xl font-semibold">{lab.name}</h3>
-                      <Badge variant={lab.status === "ready" ? "default" : lab.status === "provisioning" ? "secondary" : "destructive"}>
+                      <Badge variant={
+                        lab.status === "ready" ? "default" : 
+                        lab.status === "provisioning" ? "secondary" : 
+                        lab.status === "pending" ? "outline" : 
+                        "destructive"
+                      }>
                         {lab.status.toUpperCase()}
                       </Badge>
                     </div>
@@ -381,6 +427,32 @@ function AdminPageContent() {
                           View Details
                         </a>
                       </Button>
+                      {lab.status === 'pending' && (
+                        <>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedLab(lab);
+                              setApprovalAction('approve');
+                              setShowApprovalDialog(true);
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedLab(lab);
+                              setApprovalAction('reject');
+                              setShowApprovalDialog(true);
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
                       {lab.status === 'ready' && (
                         <Button
                           variant="destructive"
@@ -489,6 +561,36 @@ function AdminPageContent() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Stop Lab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Lab Approval Dialog */}
+      <AlertDialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {approvalAction === 'approve' ? 'Approve Lab' : 'Reject Lab'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to {approvalAction} lab &quot;{selectedLab?.name}&quot;? 
+              {approvalAction === 'approve' 
+                ? ' This will start the lab provisioning process.' 
+                : ' This will mark the lab as rejected and it will not be provisioned.'
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleApprovalAction}
+              className={approvalAction === 'approve' 
+                ? "bg-green-600 text-white hover:bg-green-700" 
+                : "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              }
+            >
+              {approvalAction === 'approve' ? 'Approve' : 'Reject'} Lab
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

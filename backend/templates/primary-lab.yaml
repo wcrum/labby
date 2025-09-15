@@ -3,6 +3,7 @@ id: "primary-lab"
 description: "A lab environment with credentials into a single Palette Project."
 expiration_duration: "2h"
 owner: "admin@spectrocloud.com"
+require_approval: true
 services:
   - name: "palette-project"
     service_id: "palette-project"

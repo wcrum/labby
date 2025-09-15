@@ -5,10 +5,24 @@ import { LabSession } from "@/types/lab";
 
 // Convert backend LabResponse to frontend LabSession format
 export function convertLabResponse(labResponse: LabResponse): LabSession {
+  // Map backend status to frontend status
+  let status: LabSession['status'];
+  switch (labResponse.status) {
+    case 'pending':
+    case 'provisioning':
+    case 'ready':
+    case 'error':
+    case 'expired':
+      status = labResponse.status;
+      break;
+    default:
+      status = 'error'; // fallback for unknown statuses
+  }
+
   return {
     id: labResponse.id,
     name: labResponse.name,
-    status: labResponse.status,
+    status,
     startedAt: labResponse.started_at,
     endsAt: labResponse.ends_at,
     owner: labResponse.owner || { name: "Unknown", email: "unknown" },

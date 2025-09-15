@@ -257,6 +257,9 @@ func main() {
 	admin.Use(handler.AuthMiddleware(), handler.AdminMiddleware())
 	{
 		admin.GET("/labs", handler.GetAllLabs)
+		admin.GET("/labs/pending", handler.GetPendingLabs)
+		admin.POST("/labs/:id/approve", handler.ApproveLab)
+		admin.POST("/labs/:id/reject", handler.RejectLab)
 		admin.POST("/labs/:id/stop", handler.AdminStopLab)
 		admin.DELETE("/labs/:id", handler.AdminDeleteLab)
 		admin.POST("/labs/:id/cleanup", handler.CleanupLab)

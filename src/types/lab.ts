@@ -13,7 +13,7 @@ export type Credential = {
 export type LabSession = {
   id: string;
   name: string;
-  status: "provisioning" | "ready" | "error" | "expired" | "starting";
+  status: "pending" | "provisioning" | "ready" | "error" | "expired" | "starting";
   startedAt?: string;
   endsAt?: string;
   owner: { name: string; email: string };
@@ -37,6 +37,8 @@ export function getLabBadgeVariant(status: LabStatus) {
     case 'provisioning':
     case 'starting':
       return 'secondary' as const;
+    case 'pending':
+      return 'outline' as const;
     case 'error':
     case 'expired':
       return 'destructive' as const;

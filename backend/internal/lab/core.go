@@ -214,11 +214,17 @@ func (s *Service) CreateLabFromTemplate(templateID, ownerID string) (*models.Lab
 
 	// Initialize progress tracking
 	s.progressTracker.InitializeProgress(lab.ID)
-	s.progressTracker.AddLog(lab.ID, "Lab creation started from template")
 
-	// Start lab provisioning
-	fmt.Printf("CreateLabFromTemplate: Starting lab provisioning for lab %s\n", lab.ID)
-	go s.provisionLabFromTemplate(lab.ID, templateID)
+	// Check if lab requires approval
+	if template.RequireApproval {
+		s.progressTracker.AddLog(lab.ID, "Lab creation started from template - awaiting approval")
+		fmt.Printf("CreateLabFromTemplate: Lab %s requires approval, not starting provisioning\n", lab.ID)
+	} else {
+		s.progressTracker.AddLog(lab.ID, "Lab creation started from template")
+		// Start lab provisioning only if no approval required
+		fmt.Printf("CreateLabFromTemplate: Starting lab provisioning for lab %s\n", lab.ID)
+		go s.provisionLabFromTemplate(lab.ID, templateID)
+	}
 
 	fmt.Printf("CreateLabFromTemplate: Lab creation completed successfully for lab %s\n", lab.ID)
 	return lab, nil
@@ -375,4 +381,97 @@ func (s *Service) GetServiceUsage() []*models.ServiceUsage {
 	}
 
 	return usage
+}
+
+// ApproveLab approves a pending lab and starts provisioning
+func (s *Service) ApproveLab(labID string) error {
+	fmt.Printf("ApproveLab: Approving lab %s\n", labID)
+
+	// Get the lab from database
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
+		fmt.Printf("ApproveLab: Failed to get lab %s: %v\n", labID, err)
+		return fmt.Errorf("failed to get lab: %w", err)
+	}
+
+	// Check if lab is in pending status
+	if lab.Status != models.LabStatusPending {
+		fmt.Printf("ApproveLab: Lab %s is not in pending status (current: %s)\n", labID, lab.Status)
+		return fmt.Errorf("lab is not in pending status")
+	}
+
+	// Update lab status to provisioning
+	lab.Status = models.LabStatusProvisioning
+	lab.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateLab(lab); err != nil {
+		fmt.Printf("ApproveLab: Failed to update lab %s: %v\n", labID, err)
+		return fmt.Errorf("failed to update lab: %w", err)
+	}
+
+	// Update progress tracking
+	s.progressTracker.AddLog(labID, "Lab approved by administrator")
+
+	// Start lab provisioning
+	fmt.Printf("ApproveLab: Starting lab provisioning for approved lab %s\n", labID)
+	go s.provisionLabFromTemplate(labID, lab.TemplateID)
+
+	fmt.Printf("ApproveLab: Lab %s approved successfully\n", labID)
+	return nil
+}
+
+// RejectLab rejects a pending lab
+func (s *Service) RejectLab(labID string) error {
+	fmt.Printf("RejectLab: Rejecting lab %s\n", labID)
+
+	// Get the lab from database
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
+		fmt.Printf("RejectLab: Failed to get lab %s: %v\n", labID, err)
+		return fmt.Errorf("failed to get lab: %w", err)
+	}
+
+	// Check if lab is in pending status
+	if lab.Status != models.LabStatusPending {
+		fmt.Printf("RejectLab: Lab %s is not in pending status (current: %s)\n", labID, lab.Status)
+		return fmt.Errorf("lab is not in pending status")
+	}
+
+	// Update lab status to error (rejected)
+	lab.Status = models.LabStatusError
+	lab.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateLab(lab); err != nil {
+		fmt.Printf("RejectLab: Failed to update lab %s: %v\n", labID, err)
+		return fmt.Errorf("failed to update lab: %w", err)
+	}
+
+	// Update progress tracking
+	s.progressTracker.AddLog(labID, "Lab rejected by administrator")
+
+	fmt.Printf("RejectLab: Lab %s rejected successfully\n", labID)
+	return nil
+}
+
+// GetPendingLabs returns all labs that are pending approval
+func (s *Service) GetPendingLabs() ([]*models.Lab, error) {
+	fmt.Printf("GetPendingLabs: Getting all pending labs\n")
+
+	// Get all labs from database
+	labs, err := s.repo.GetAllLabs()
+	if err != nil {
+		fmt.Printf("GetPendingLabs: Failed to get labs: %v\n", err)
+		return nil, fmt.Errorf("failed to get labs: %w", err)
+	}
+
+	// Filter for pending labs
+	var pendingLabs []*models.Lab
+	for _, lab := range labs {
+		if lab.Status == models.LabStatusPending {
+			pendingLabs = append(pendingLabs, lab)
+		}
+	}
+
+	fmt.Printf("GetPendingLabs: Found %d pending labs\n", len(pendingLabs))
+	return pendingLabs, nil
 }
