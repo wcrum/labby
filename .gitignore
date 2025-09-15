@@ -49,3 +49,4 @@ backend/server
 terraform/
 backend/server.log
 frontend.log
+.netrc

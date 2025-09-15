@@ -1,0 +1,17 @@
+# .netrc file for Git authentication with private repositories
+# Copy this file to .netrc and update with your credentials
+#
+# Format:
+# machine <hostname>
+# login <username>
+# password <token>
+
+machine github.com
+login your-github-username
+password your-github-token
+
+# For SpectroCloud private repositories, you might need:
+# machine github.com
+# login your-spectrocloud-username  
+# password your-spectrocloud-token
+

@@ -1,6 +1,56 @@
-version: '3.8'
-
 services:
+  # Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: spectro-lab-postgres
+    environment:
+      POSTGRES_DB: spectro_lab
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spectro-lab-network
+
+  # pgAdmin (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: spectro-lab-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@spectrocloud.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8081:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - spectro-lab-network
+
+  # Dex OIDC Server
+  dex:
+    image: ghcr.io/dexidp/dex:v2.44.0
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./dex-config.yaml:/etc/dex/config.yaml:ro
+    command: ["dex", "serve", "/etc/dex/config.yaml"]
+    environment:
+      - DEX_OVERWRITE_INTEGRATION_TEST_CONFIG=true
+    networks:
+      - spectro-lab-network
+
+  # Main Application
   spectro-lab:
     build:
       context: .
@@ -10,9 +60,16 @@ services:
     environment:
       - PORT=8080
       - JWT_SECRET=your-secret-key-change-in-production
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/spectro_lab?sslmode=disable
+      - DEX_ISSUER=http://dex:5556/dex
     volumes:
       # Optional: Mount templates directory for development
       - ./backend/templates:/app/templates:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dex:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
@@ -20,3 +77,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - spectro-lab-network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  spectro-lab-network:
+    driver: bridge

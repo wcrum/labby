@@ -80,59 +80,66 @@ clean: ## Clean all build artifacts
 
 # Docker Compose
 .PHONY: up
-up: ## Start with docker-compose
+up: ## Start all services with docker-compose
+	@echo "Starting all services..."
+	docker-compose up -d
+	@echo "All services started successfully!"
+	@echo "Services available at:"
+	@echo "  - Main App: http://localhost:8080"
+	@echo "  - Dex OIDC: http://localhost:5556"
+	@echo "  - pgAdmin: http://localhost:8081"
+	@echo "  - PostgreSQL: localhost:5432"
+
+.PHONY: up-logs
+up-logs: ## Start all services with logs
+	@echo "Starting all services with logs..."
 	docker-compose up
 
 .PHONY: down
-down: ## Stop docker-compose
+down: ## Stop all services
+	@echo "Stopping all services..."
 	docker-compose down
+	@echo "All services stopped!"
 
-# Database targets
-.PHONY: db-up
-db-up: ## Start database with docker-compose
-	@echo "Starting database..."
-	cd $(BACKEND_DIR) && docker-compose -f docker-compose.db.yml up -d
-	@echo "Database started successfully!"
+.PHONY: down-volumes
+down-volumes: ## Stop all services and delete volumes
+	@echo "Stopping all services and deleting volumes..."
+	docker-compose down -v
+	@echo "All services stopped and volumes deleted!"
 
-.PHONY: db-down
-db-down: ## Stop database and delete volumes
-	@echo "Stopping database and deleting volumes..."
-	cd $(BACKEND_DIR) && docker-compose -f docker-compose.db.yml down -v
-	@echo "Database stopped and volumes deleted!"
+.PHONY: logs
+logs: ## Show logs for all services
+	docker-compose logs -f
 
-# Dex OIDC targets
-.PHONY: dex-up
-dex-up: ## Start Dex OIDC server
-	@echo "Starting Dex OIDC server..."
-	docker-compose -f docker-compose.dex.yml up -d
-	@echo "Dex OIDC server started on http://localhost:5556"
+.PHONY: logs-app
+logs-app: ## Show logs for main application
+	docker-compose logs -f spectro-lab
 
-.PHONY: dex-down
-dex-down: ## Stop Dex OIDC server
-	@echo "Stopping Dex OIDC server..."
-	docker-compose -f docker-compose.dex.yml down
-	@echo "Dex OIDC server stopped"
+.PHONY: logs-db
+logs-db: ## Show logs for database
+	docker-compose logs -f postgres
 
-.PHONY: dex-logs
-dex-logs: ## Show Dex OIDC server logs
-	docker-compose -f docker-compose.dex.yml logs -f
+.PHONY: logs-dex
+logs-dex: ## Show logs for Dex OIDC server
+	docker-compose logs -f dex
 
-.PHONY: dev-with-dex
-dev-with-dex: dex-up ## Start development environment with Dex OIDC
-	@echo "Starting development environment with Dex OIDC..."
+.PHONY: dev-with-services
+dev-with-services: up ## Start development environment with all services
+	@echo "Starting development environment with all services..."
 	@echo "Services:"
 	@echo "  - Dex OIDC Server: http://localhost:5556"
+	@echo "  - PostgreSQL Database: localhost:5432"
+	@echo "  - pgAdmin: http://localhost:8081"
 	@echo "  - Backend API: http://localhost:8080"
 	@echo "  - Frontend: http://localhost:3000"
 	@echo ""
 	@echo "Test users (OIDC):"
-	@echo "  - admin@spectrocloud.com / admin123 (admin role)"
-	@echo "  - user1@spectrocloud.com / user123 (spectrocloud org)"
-	@echo "  - user2@example.com / user123 (example-org)"
+	@echo "  - admin@spectrocloud.com / password (admin role)"
+	@echo "  - test@test.com / password (example-org)"
 	@echo ""
 	@echo "Press Ctrl+C to stop all services"
 	@echo ""
-	@trap 'make dex-down' INT TERM; \
+	@trap 'make down' INT TERM; \
 	cd $(BACKEND_DIR) && go run cmd/server/main.go & \
 	BACKEND_PID=$$!; \
 	cd .. && pnpm dev & \

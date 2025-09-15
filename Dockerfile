@@ -28,6 +28,10 @@ RUN apk add --no-cache git
 # Set working directory
 WORKDIR /app
 
+# Copy .netrc for private repository access
+COPY .netrc /root/.netrc
+RUN chmod 600 /root/.netrc
+
 # Copy go mod files
 COPY backend/go.mod backend/go.sum ./
 
