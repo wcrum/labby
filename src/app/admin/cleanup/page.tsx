@@ -423,7 +423,7 @@ function getAutoConstructedExample(paramName: string, labId: string): string {
     case 'api_key_name':
       return `lab-${labId}-api-key`;
     case 'tenant_id':
-      return `tenant-${labId}`;
+      return `lab-${labId}`;
     case 'username':
       return `lab-${labId}@pve`;
     case 'pool_name':

@@ -29,8 +29,6 @@ import {
   AlertTriangle,
   FlaskConical,
   Check,
-  XSquare,
-  FlaskConicalOffIcon,
   FlaskConicalOff,
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -62,7 +60,7 @@ function AdminPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm] = useState("");
-  const [statusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [serviceUsage, setServiceUsage] = useState<ServiceUsage[]>([]);
   const [serviceConfigs, setServiceConfigs] = useState<ServiceConfig[]>([]);
   const [serviceLimits, setServiceLimits] = useState<ServiceLimit[]>([]);
@@ -109,6 +107,10 @@ function AdminPageContent() {
       console.error(`Failed to ${approvalAction} lab:`, error);
       setError(`Failed to ${approvalAction} lab`);
     }
+  };
+
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status);
   };
 
   // Get countdown data for all labs using a single hook
@@ -167,7 +169,16 @@ function AdminPageContent() {
     const matchesSearch = lab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (lab.owner?.name || "Unknown").toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (lab.owner?.email || "unknown").toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || lab.status === statusFilter;
+    
+    let matchesStatus = false;
+    if (statusFilter === "all") {
+      matchesStatus = true;
+    } else if (statusFilter === "error") {
+      matchesStatus = lab.status === "error" || lab.status === "expired";
+    } else {
+      matchesStatus = lab.status === statusFilter;
+    }
+    
     return matchesSearch && matchesStatus;
   });
 
@@ -239,7 +250,12 @@ function AdminPageContent() {
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <Card className="rounded-xl border-black dark:border-white">
+          <Card 
+            className={`rounded-xl border-black dark:border-white cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "all" ? "ring-2 ring-black dark:ring-white shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("all")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -250,7 +266,12 @@ function AdminPageContent() {
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl border-green-600">
+          <Card 
+            className={`rounded-xl border-green-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "ready" ? "ring-2 ring-green-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("ready")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between ">
                 <div>
@@ -261,7 +282,12 @@ function AdminPageContent() {
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl border-blue-600">
+          <Card 
+            className={`rounded-xl border-blue-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "provisioning" ? "ring-2 ring-blue-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("provisioning")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -272,7 +298,12 @@ function AdminPageContent() {
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl border-orange-600">
+          <Card 
+            className={`rounded-xl border-orange-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "pending" ? "ring-2 ring-orange-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("pending")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -283,7 +314,12 @@ function AdminPageContent() {
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl border-red-600">
+          <Card 
+            className={`rounded-xl border-red-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "error" || statusFilter === "expired" ? "ring-2 ring-red-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("error")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -295,6 +331,37 @@ function AdminPageContent() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Filter Status Indicator */}
+        {statusFilter !== "all" && (
+          <Card className="rounded-xl border-blue-200 bg-blue-50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-blue-800">
+                    Filtering by: <Badge variant="secondary" className="ml-1">
+                      {statusFilter === "error" ? "Errors & Expired" : 
+                       statusFilter === "ready" ? "Ready" :
+                       statusFilter === "provisioning" ? "Provisioning" :
+                       statusFilter === "pending" ? "Pending" : statusFilter}
+                    </Badge>
+                  </span>
+                  <span className="text-sm text-blue-600">
+                    ({filteredLabs.length} of {labs.length} labs)
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleStatusFilter("all")}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-100"
+                >
+                  Clear Filter
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Service Usage Section */}
         <Card className="rounded-xl">

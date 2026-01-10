@@ -45,8 +45,8 @@ export function LoginForm() {
     }
   };
 
-  const handleOIDCLogin = () => {
-    oidcLogin(inviteCode || undefined);
+  const handleOIDCLogin = async () => {
+    await oidcLogin(inviteCode || undefined);
   };
 
   return (

@@ -110,7 +110,7 @@ type GuacamoleTokenResponse struct {
 
 // authenticate performs authentication and gets auth token
 func (gc *GuacamoleClient) authenticate(username, password string) error {
-	loginURL := fmt.Sprintf("%s/guacamole/api/tokens", gc.baseURL)
+	loginURL := fmt.Sprintf("%s/api/tokens", gc.baseURL)
 
 	// Create form data
 	data := url.Values{}
@@ -160,7 +160,7 @@ type GuacamoleUserRequest struct {
 
 // createUser creates a new Guacamole user
 func (gc *GuacamoleClient) createUser(username, password string) error {
-	createURL := fmt.Sprintf("%s/guacamole/api/session/data/mysql/users", gc.baseURL)
+	createURL := fmt.Sprintf("%s/api/session/data/mysql/users", gc.baseURL)
 
 	// Create user request
 	userReq := GuacamoleUserRequest{
@@ -217,7 +217,7 @@ func (gc *GuacamoleClient) createUser(username, password string) error {
 
 // deleteUser deletes a Guacamole user
 func (gc *GuacamoleClient) deleteUser(username string) error {
-	deleteURL := fmt.Sprintf("%s/guacamole/api/session/data/mysql/users/%s", gc.baseURL, url.PathEscape(username))
+	deleteURL := fmt.Sprintf("%s/api/session/data/mysql/users/%s", gc.baseURL, url.PathEscape(username))
 
 	req, err := http.NewRequest("DELETE", deleteURL, nil)
 	if err != nil {

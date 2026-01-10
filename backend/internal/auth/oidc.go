@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,11 +15,12 @@ import (
 
 // OIDCService handles OIDC authentication with Dex
 type OIDCService struct {
-	provider    *oidc.Provider
-	config      oauth2.Config
-	verifier    *oidc.IDTokenVerifier
-	repo        *database.Repository
-	authService *Service
+	provider       *oidc.Provider
+	config         oauth2.Config
+	verifier       *oidc.IDTokenVerifier
+	repo           *database.Repository
+	authService    *Service
+	externalIssuer string // For frontend redirects
 }
 
 // OIDCUserInfo represents user information from OIDC
@@ -29,12 +31,12 @@ type OIDCUserInfo struct {
 }
 
 // NewOIDCService creates a new OIDC service following Dex documentation pattern
-func NewOIDCService(issuer, clientID, clientSecret, redirectURL string, repo *database.Repository, authService *Service) (*OIDCService, error) {
+func NewOIDCService(internalIssuer, externalIssuer, clientID, clientSecret, redirectURL string, repo *database.Repository, authService *Service) (*OIDCService, error) {
 	ctx := context.Background()
 
-	fmt.Printf("DEBUG: Creating OIDC provider with issuer: %s\n", issuer)
-	// Initialize a provider by specifying dex's issuer URL
-	provider, err := oidc.NewProvider(ctx, issuer)
+	fmt.Printf("DEBUG: Creating OIDC provider with internal issuer: %s\n", internalIssuer)
+	// Initialize a provider by specifying dex's internal issuer URL (for backend communication)
+	provider, err := oidc.NewProvider(ctx, internalIssuer)
 	if err != nil {
 		fmt.Printf("DEBUG: Failed to create OIDC provider: %v\n", err)
 		return nil, fmt.Errorf("failed to create OIDC provider: %w", err)
@@ -42,6 +44,7 @@ func NewOIDCService(issuer, clientID, clientSecret, redirectURL string, repo *da
 	fmt.Printf("DEBUG: OIDC provider created successfully\n")
 
 	// Configure the OAuth2 config with the client values following Dex docs
+	// Use internal issuer for all backend operations (both OAuth2 config and token validation)
 	config := oauth2.Config{
 		// client_id and client_secret of the client
 		ClientID:     clientID,
@@ -50,7 +53,7 @@ func NewOIDCService(issuer, clientID, clientSecret, redirectURL string, repo *da
 		// The redirectURL
 		RedirectURL: redirectURL,
 
-		// Discovery returns the OAuth2 endpoints
+		// Discovery returns the OAuth2 endpoints (use internal issuer for backend operations)
 		Endpoint: provider.Endpoint(),
 
 		// "openid" is a required scope for OpenID Connect flows
@@ -62,17 +65,29 @@ func NewOIDCService(issuer, clientID, clientSecret, redirectURL string, repo *da
 	verifier := provider.Verifier(&oidc.Config{ClientID: clientID})
 
 	return &OIDCService{
-		provider:    provider,
-		config:      config,
-		verifier:    verifier,
-		repo:        repo,
-		authService: authService,
+		provider:       provider,
+		config:         config,
+		verifier:       verifier,
+		repo:           repo,
+		authService:    authService,
+		externalIssuer: externalIssuer,
 	}, nil
 }
 
 // GetAuthURL returns the OIDC authorization URL
+// Override the authorization URL to use external issuer for frontend access
 func (s *OIDCService) GetAuthURL(state string) string {
-	return s.config.AuthCodeURL(state)
+	// Create a custom authorization URL using the external issuer
+	// This ensures the frontend can reach Dex
+	authURL := s.externalIssuer + "/auth"
+	params := url.Values{}
+	params.Set("client_id", s.config.ClientID)
+	params.Set("redirect_uri", s.config.RedirectURL)
+	params.Set("response_type", "code")
+	params.Set("scope", strings.Join(s.config.Scopes, " "))
+	params.Set("state", state)
+
+	return authURL + "?" + params.Encode()
 }
 
 // ExchangeCodeForToken exchanges authorization code for tokens

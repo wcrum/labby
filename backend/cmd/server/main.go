@@ -51,8 +51,12 @@ func main() {
 	// Get configuration from environment
 	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	port := getEnv("PORT", "8080")
+	corsAllowedOrigins := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://tunnel.wcrum.dev")
 
-	// Initialize database
+	// Log CORS configuration
+	parsedOrigins := parseOrigins(corsAllowedOrigins)
+	log.Printf("CORS Allowed Origins: %v", parsedOrigins)
+
 	log.Println("Initializing database connection...")
 	dbConfig := database.NewConfig()
 	db, err := database.Connect(dbConfig)
@@ -73,13 +77,14 @@ func main() {
 	labService := lab.NewService(repo)
 
 	// Initialize OIDC service
-	oidcIssuer := getEnv("OIDC_ISSUER", "http://localhost:5556/dex")
+	oidcInternalIssuer := getEnv("OIDC_INTERNAL_ISSUER", "http://dex:5556/dex")
+	oidcExternalIssuer := getEnv("OIDC_EXTERNAL_ISSUER", "http://localhost:5556/dex")
 	oidcClientID := getEnv("OIDC_CLIENT_ID", "spectro-lab-client")
 	oidcClientSecret := getEnv("OIDC_CLIENT_SECRET", "spectro-lab-secret")
 	oidcRedirectURL := getEnv("OIDC_REDIRECT_URL", "http://localhost:8080/auth/callback")
 
-	log.Printf("Initializing OIDC service with issuer: %s", oidcIssuer)
-	oidcService, err := auth.NewOIDCService(oidcIssuer, oidcClientID, oidcClientSecret, oidcRedirectURL, repo, authService)
+	log.Printf("Initializing OIDC service with internal issuer: %s, external issuer: %s", oidcInternalIssuer, oidcExternalIssuer)
+	oidcService, err := auth.NewOIDCService(oidcInternalIssuer, oidcExternalIssuer, oidcClientID, oidcClientSecret, oidcRedirectURL, repo, authService)
 	if err != nil {
 		log.Printf("ERROR: Failed to initialize OIDC service: %v", err)
 		log.Println("OIDC authentication will not be available")
@@ -155,7 +160,7 @@ func main() {
 
 	// Add CORS middleware for development
 	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "https://tunnel.wcrum.dev"},
+		AllowedOrigins:   parsedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
@@ -209,6 +214,9 @@ func main() {
 
 	// Health check endpoint
 	router.GET("/health", handler.HealthCheck)
+
+	// Configuration endpoint
+	router.GET("/api/config", handler.GetConfig)
 
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
@@ -309,4 +317,24 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// parseOrigins parses a comma-separated string of origins into a slice
+func parseOrigins(origins string) []string {
+	if origins == "" {
+		return []string{}
+	}
+
+	// Split by comma and trim whitespace
+	parts := strings.Split(origins, ",")
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
 }

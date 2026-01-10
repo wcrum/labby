@@ -430,12 +430,12 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 				fmt.Printf("Retrieved tenant ID from lab ServiceData: %s\n", tenantID)
 			} else {
 				// If tenant ID is not in context, construct it from lab ID
-				tenantID = fmt.Sprintf("tenant-%s", shortID)
+				tenantID = fmt.Sprintf("lab-%s", shortID)
 				fmt.Printf("Warning: palette tenant ID not found in context or lab data, using constructed tenant ID: %s\n", tenantID)
 			}
 		} else {
 			// If tenant ID is not in context, construct it from lab ID
-			tenantID = fmt.Sprintf("tenant-%s", shortID)
+			tenantID = fmt.Sprintf("lab-%s", shortID)
 			fmt.Printf("Warning: palette tenant ID not found in context, using constructed tenant ID: %s\n", tenantID)
 		}
 	}
@@ -469,6 +469,20 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 			fmt.Printf("Warning: Failed to delete tenant: %v\n", err)
 		} else {
 			fmt.Printf("  Tenant deleted successfully\n")
+		}
+
+		fmt.Printf(" - Cleaning up tenant: %s\n", tenantID)
+		if err := pc.CleanUpTenant(tenantID, false); err != nil {
+			fmt.Printf("Warning: Failed to cleanup tenant: %v\n", err)
+			fmt.Printf(" - Force Cleaning up tenant: %s\n", tenantID)
+			err := pc.CleanUpTenant(tenantID, true)
+			if err != nil {
+				fmt.Printf("  Tenant cleaned up successfully (Force Deleted)\n")
+			} else {
+				fmt.Printf("Warning: Failed to force cleanup tenant: %v\n", err)
+			}
+		} else {
+			fmt.Printf("  Tenant cleaned up successfully\n")
 		}
 	} else {
 		fmt.Printf("- Skipping tenant deletion (no valid tenant ID found)\n")

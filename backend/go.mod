@@ -27,6 +27,11 @@ require (
 
 require github.com/spectrocloud/palette-sdk-go-internal v0.0.0-20250706201310-0a07010206fe
 
+// TEMPORARY: Replace directive for local palette-sdk-go-internal dependency
+// This is a temporary workaround until upstream changes are made to the official palette-sdk-go-internal package.
+// TODO: Remove this replace directive once upstream changes are available
+replace github.com/spectrocloud/palette-sdk-go-internal => ../../palette-sdk-go-internal
+
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -90,5 +95,3 @@ require (
 	golang.org/x/tools v0.36.0 // indirect
 	google.golang.org/protobuf v1.36.7 // indirect
 )
-
-replace github.com/spectrocloud/palette-sdk-go-internal => ../../palette-sdk-go-internal

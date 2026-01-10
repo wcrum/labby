@@ -537,7 +537,7 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", labID))
 			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", labID))
 		case "palette_tenant":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("lab-%s", labID))
 		case "proxmox_user":
 			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", labID))
 			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", labID))
@@ -593,7 +593,7 @@ func getAutoConstructedResources(serviceType, labID string) map[string]string {
 		resources["user_email"] = fmt.Sprintf("lab+%s@spectrocloud.com", labID)
 		resources["api_key_name"] = fmt.Sprintf("lab-%s-api-key", labID)
 	case "palette_tenant":
-		resources["tenant_id"] = fmt.Sprintf("tenant-%s", labID)
+		resources["tenant_id"] = fmt.Sprintf("lab-%s", labID)
 	case "proxmox_user":
 		resources["username"] = fmt.Sprintf("lab-%s@pve", labID)
 		resources["pool_name"] = fmt.Sprintf("lab-%s-pool", labID)

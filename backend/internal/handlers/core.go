@@ -123,3 +123,27 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 		"message": "Spectro Lab Backend is running",
 	})
 }
+
+// GetConfig returns frontend configuration
+// @Summary Get frontend configuration
+// @Description Returns configuration values needed by the frontend
+// @Tags system
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Configuration"
+// @Router /api/config [get]
+func (h *Handler) GetConfig(c *gin.Context) {
+	// Get the API URL from environment or use the request host
+	apiURL := c.GetHeader("X-Forwarded-Proto") + "://" + c.GetHeader("X-Forwarded-Host")
+	if apiURL == "://" {
+		// Fallback to request host if no forwarded headers
+		scheme := "http"
+		if c.Request.TLS != nil {
+			scheme = "https"
+		}
+		apiURL = scheme + "://" + c.Request.Host
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"api_url": apiURL,
+	})
+}

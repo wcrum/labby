@@ -56,8 +56,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const oidcLogin = (inviteCode?: string) => {
-    const loginURL = apiService.getOIDCLoginURL(inviteCode);
+  const oidcLogin = async (inviteCode?: string) => {
+    const loginURL = await apiService.getOIDCLoginURL(inviteCode);
     window.location.href = loginURL;
   };
 

@@ -1,6 +1,7 @@
 // API service for communicating with the backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// We'll determine the API URL at runtime by calling the config endpoint
+let API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export type UserRole = 'user' | 'admin';
 
@@ -176,6 +177,7 @@ export interface UserInfo {
 
 class ApiService {
   private token: string | null = null;
+  private initialized: boolean = false;
 
   setToken(token: string) {
     this.token = token;
@@ -198,10 +200,33 @@ class ApiService {
     }
   }
 
+  // Initialize API URL from config endpoint
+  async initializeConfig(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      // Try to get config from the current domain
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : API_BASE_URL;
+      const configResponse = await fetch(`${currentOrigin}/api/config`);
+      
+      if (configResponse.ok) {
+        const config = await configResponse.json();
+        API_BASE_URL = config.api_url;
+        this.initialized = true;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch config, using default API URL:', error);
+      // Keep using the default API_BASE_URL
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Initialize config if not already done
+    await this.initializeConfig();
+    
     const url = `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
 
@@ -251,7 +276,10 @@ class ApiService {
   }
 
   // OIDC Authentication
-  getOIDCLoginURL(inviteCode?: string): string {
+  async getOIDCLoginURL(inviteCode?: string): Promise<string> {
+    // Initialize config if not already done
+    await this.initializeConfig();
+    
     const url = new URL('/api/auth/oidc/login', API_BASE_URL);
     if (inviteCode) {
       url.searchParams.set('invite_code', inviteCode);

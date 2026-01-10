@@ -1,11 +1,11 @@
-issuer: http://localhost:5556/dex
+issuer: http://dex:5556/dex
 storage:
   type: memory
 
 # Web configuration
 web:
   http: 0.0.0.0:5556
-  allowedOrigins: ["http://localhost:8080", "http://127.0.0.1:8080", "https://tunnel.wcrum.dev"]
+  allowedOrigins: ["http://localhost:8080", "http://127.0.0.1:8080", "https://tunnel.wcrum.dev", "http://localhost:3000", "http://127.0.0.1:3000"]
 
 # Enable local users
 enablePasswordDB: true
@@ -23,6 +23,8 @@ staticClients:
       - 'http://localhost:8080/auth/callback'
       - 'http://127.0.0.1:8080/auth/callback'
       - 'https://tunnel.wcrum.dev/auth/callback'
+      - 'http://localhost:3000/auth/callback'
+      - 'http://127.0.0.1:3000/auth/callback'
     trustedPeers:
       - spectro-lab-client
 
@@ -35,7 +37,7 @@ connectors:
       issuer: https://trial-7452475.okta.com
       clientID: 0oavabn0mhXggyJ7G697
       clientSecret: jLiruon2bcNhFysKmHd5uSFBbnDKYmekMs1jjNa1jybUw7b0blQUKrVkiL16Ld5a
-      redirectURI: http://localhost:5556/dex/callback
+      redirectURI: http://0.0.0.0:5556/dex/callback
       scopes:
         - openid
         - profile
