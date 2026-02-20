@@ -20,11 +20,8 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 	paletteService.ConfigureFromServiceConfig(serviceConfig)
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating Project", "failed", "Lab not found")
 		return
 	}
@@ -38,7 +35,7 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -52,6 +49,12 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -64,19 +67,34 @@ func (s *Service) provisionPaletteService(labID string, serviceConfig *models.Se
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := paletteService.ExecuteSetup(setupCtx)
+	err = paletteService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Project setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette Project setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Palette Project service setup completed successfully")
@@ -91,11 +109,8 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 	proxmoxUserService.ConfigureFromServiceConfig(serviceConfig.Config)
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
@@ -109,7 +124,7 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -123,6 +138,12 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -135,19 +156,34 @@ func (s *Service) provisionProxmoxUserService(labID string, serviceConfig *model
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := proxmoxUserService.ExecuteSetup(setupCtx)
+	err = proxmoxUserService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Proxmox user setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Proxmox user setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Proxmox user created successfully")
@@ -160,21 +196,21 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	// Set environment variables from service config with comprehensive logging
 	s.progressTracker.AddLog(labID, "Setting up environment variables from service config...")
 
-	if host, ok := serviceConfig.Config["palette_host"]; ok {
+	if host, exists := serviceConfig.Config.GetString("palette_host"); exists {
 		os.Setenv("palette_host", host)
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Set palette_host: %s", host))
 	} else {
 		s.progressTracker.AddLog(labID, "Warning: palette_host not found in service config")
 	}
 
-	if systemUsername, ok := serviceConfig.Config["palette_system_username"]; ok {
+	if systemUsername, exists := serviceConfig.Config.GetString("palette_system_username"); exists {
 		os.Setenv("palette_system_username", systemUsername)
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Set palette_system_username: %s", systemUsername))
 	} else {
 		s.progressTracker.AddLog(labID, "Warning: palette_system_username not found in service config")
 	}
 
-	if systemPassword, ok := serviceConfig.Config["palette_system_password"]; ok {
+	if systemPassword, exists := serviceConfig.Config.GetString("palette_system_password"); exists {
 		os.Setenv("palette_system_password", systemPassword)
 		s.progressTracker.AddLog(labID, "Set palette_system_password: [REDACTED]")
 	} else {
@@ -192,17 +228,23 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	s.progressTracker.AddLog(labID, "Creating Palette Tenant service instance...")
 	paletteTenantService := services.NewPaletteTenantService()
 
-	// Log the environment variables that the service will use
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_host: %s", os.Getenv("palette_host")))
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_system_username: %s", os.Getenv("palette_system_username")))
-	s.progressTracker.AddLog(labID, "Service will use palette_system_password: [REDACTED]")
+	// Configure the service with credentials from service config
+	paletteTenantService.ConfigureFromServiceConfig(serviceConfig)
+
+	// Log the service config values that the service will use
+	if host, exists := serviceConfig.Config.GetString("palette_host"); exists {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_host: %s", host))
+	}
+	if systemUsername, exists := serviceConfig.Config.GetString("palette_system_username"); exists {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use palette_system_username: %s", systemUsername))
+	}
+	if _, exists := serviceConfig.Config.GetString("palette_system_password"); exists {
+		s.progressTracker.AddLog(labID, "Service will use palette_system_password: [REDACTED]")
+	}
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
@@ -216,7 +258,7 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -230,6 +272,12 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -242,19 +290,34 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := paletteTenantService.ExecuteSetup(setupCtx)
+	err = paletteTenantService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Palette Tenant setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Palette Tenant setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Palette Tenant service setup completed successfully")
@@ -262,15 +325,16 @@ func (s *Service) provisionPaletteTenantService(labID string, serviceConfig *mod
 
 // provisionTerraformCloudService provisions a Terraform Cloud service
 func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *models.ServiceConfig) {
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", serviceConfig.Config["host"]))
-	s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", serviceConfig.Config["organization"]))
+	if host, exists := serviceConfig.Config.GetString("host"); exists {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_host: %s", host))
+	}
+	if organization, exists := serviceConfig.Config.GetString("organization"); exists {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Service will use tf_cloud_organization: %s", organization))
+	}
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating Workspace", "failed", "Lab not found")
 		return
 	}
@@ -284,7 +348,7 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -298,6 +362,12 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -316,19 +386,34 @@ func (s *Service) provisionTerraformCloudService(labID string, serviceConfig *mo
 	terraformCloudService.ConfigureFromServiceConfig(serviceConfig.Config, labID)
 
 	// Execute the real setup - services will update their own progress
-	err := terraformCloudService.ExecuteSetup(setupCtx)
+	err = terraformCloudService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Terraform Cloud setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, fmt.Sprintf("Terraform Cloud setup completed for lab %s", lab.Name))
@@ -343,11 +428,8 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 	guacamoleService.ConfigureFromServiceConfig(serviceConfig.Config)
 
 	// Get lab for context
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	s.mu.Unlock()
-
-	if !exists {
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.UpdateServiceStep(labID, serviceConfig.Name, "Creating User", "failed", "Lab not found")
 		return
 	}
@@ -361,7 +443,7 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 		Context:  context.Background(),
 		Lab:      lab,
 		AddCredential: func(credential *interfaces.Credential) error {
-			// Convert to models.Credential and add to lab
+			// Convert to models.Credential and save to database
 			cred := models.Credential{
 				ID:        credential.ID,
 				LabID:     credential.LabID,
@@ -375,6 +457,12 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 				UpdatedAt: credential.UpdatedAt,
 			}
 
+			// Save credential to database
+			if err := s.repo.CreateCredential(&cred); err != nil {
+				return fmt.Errorf("failed to save credential to database: %w", err)
+			}
+
+			// Also add to lab object in memory for consistency
 			s.mu.Lock()
 			lab.Credentials = append(lab.Credentials, cred)
 			s.mu.Unlock()
@@ -387,19 +475,34 @@ func (s *Service) provisionGuacamoleService(labID string, serviceConfig *models.
 	}
 
 	// Execute the real setup - services will update their own progress
-	err := guacamoleService.ExecuteSetup(setupCtx)
+	err = guacamoleService.ExecuteSetup(setupCtx)
 	if err != nil {
 		s.progressTracker.AddLog(labID, fmt.Sprintf("Guacamole setup failed: %v", err))
 		s.progressTracker.FailProgress(labID, fmt.Sprintf("Guacamole setup failed: %v", err))
 
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
-			lab.Status = models.LabStatusError
-			lab.UpdatedAt = time.Now()
-		}
-		s.mu.Unlock()
+		lab.Status = models.LabStatusError
+		lab.UpdatedAt = time.Now()
+		s.repo.UpdateLab(lab)
 		return
+	}
+
+	// Save the lab with updated ServiceData to database
+	lab.UpdatedAt = time.Now()
+	fmt.Printf("Saving lab %s with ServiceData keys: %v\n", labID, func() []string {
+		if lab.ServiceData == nil {
+			return []string{"nil"}
+		}
+		keys := make([]string, 0, len(lab.ServiceData))
+		for k := range lab.ServiceData {
+			keys = append(keys, k)
+		}
+		return keys
+	}())
+	if err := s.repo.UpdateLab(lab); err != nil {
+		s.progressTracker.AddLog(labID, fmt.Sprintf("Failed to save lab ServiceData: %v", err))
+	} else {
+		fmt.Printf("Successfully saved lab %s ServiceData to database\n", labID)
 	}
 
 	s.progressTracker.AddLog(labID, "Guacamole user created successfully")

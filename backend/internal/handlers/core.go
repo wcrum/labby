@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/wcrum/labby/internal/auth"
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/lab"
 	"github.com/wcrum/labby/internal/models"
 
@@ -13,14 +14,18 @@ import (
 // Handler contains all the handlers
 type Handler struct {
 	authService *auth.Service
+	oidcService *auth.OIDCService
 	labService  *lab.Service
+	repo        *database.Repository
 }
 
 // NewHandler creates a new handler
-func NewHandler(authService *auth.Service, labService *lab.Service) *Handler {
+func NewHandler(authService *auth.Service, oidcService *auth.OIDCService, labService *lab.Service, repo *database.Repository) *Handler {
 	return &Handler{
 		authService: authService,
+		oidcService: oidcService,
 		labService:  labService,
+		repo:        repo,
 	}
 }
 
@@ -74,6 +79,37 @@ func (h *Handler) AdminMiddleware() gin.HandlerFunc {
 	}
 }
 
+// CheckLabAccess verifies that the authenticated user can access the specified lab
+// Returns the lab if access is granted, otherwise returns an error response
+func (h *Handler) CheckLabAccess(c *gin.Context, labID string) (*models.Lab, bool) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return nil, false
+	}
+
+	userObj := user.(*models.User)
+
+	// Get the lab
+	labInstance, err := h.labService.GetLab(labID)
+	if err != nil {
+		if err == lab.ErrLabNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Lab not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get lab"})
+		}
+		return nil, false
+	}
+
+	// Check if user is admin or lab owner
+	if !h.authService.IsAdmin(userObj) && labInstance.OwnerID != userObj.ID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Access denied: You can only access your own labs"})
+		return nil, false
+	}
+
+	return labInstance, true
+}
+
 // HealthCheck handles health check endpoint
 // @Summary Health check
 // @Description Check if the API is running
@@ -85,5 +121,29 @@ func (h *Handler) HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"message": "Spectro Lab Backend is running",
+	})
+}
+
+// GetConfig returns frontend configuration
+// @Summary Get frontend configuration
+// @Description Returns configuration values needed by the frontend
+// @Tags system
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Configuration"
+// @Router /api/config [get]
+func (h *Handler) GetConfig(c *gin.Context) {
+	// Get the API URL from environment or use the request host
+	apiURL := c.GetHeader("X-Forwarded-Proto") + "://" + c.GetHeader("X-Forwarded-Host")
+	if apiURL == "://" {
+		// Fallback to request host if no forwarded headers
+		scheme := "http"
+		if c.Request.TLS != nil {
+			scheme = "https"
+		}
+		apiURL = scheme + "://" + c.Request.Host
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"api_url": apiURL,
 	})
 }

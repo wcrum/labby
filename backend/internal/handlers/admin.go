@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
@@ -80,7 +81,11 @@ func (h *Handler) GetAllLabs(c *gin.Context) {
 	userObj := user.(*models.User)
 	fmt.Printf("GetAllLabs: User %s (role: %s) requesting all labs\n", userObj.Email, userObj.Role)
 
-	labs := h.labService.GetAllLabs()
+	labs, err := h.labService.GetAllLabs()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve labs"})
+		return
+	}
 	fmt.Printf("GetAllLabs: Found %d labs\n", len(labs))
 
 	// Convert Labs to LabResponses
@@ -140,11 +145,14 @@ func (h *Handler) LoadTemplates(c *gin.Context) {
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /admin/users [get]
 func (h *Handler) GetUsers(c *gin.Context) {
-	users := h.authService.GetAllUsers()
+	users, err := h.authService.GetAllUsers()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve users"})
+		return
+	}
 
 	// Convert users to UserWithOrganization format
 	usersWithOrg := make([]*models.UserWithOrganization, len(users))
-	orgService := services.NewOrganizationService()
 
 	for i, user := range users {
 		userWithOrg := &models.UserWithOrganization{
@@ -158,7 +166,7 @@ func (h *Handler) GetUsers(c *gin.Context) {
 
 		// If user has an organization, fetch organization details
 		if user.OrganizationID != nil {
-			org, err := orgService.GetOrganization(*user.OrganizationID)
+			org, err := h.repo.GetOrganizationByID(*user.OrganizationID)
 			if err == nil {
 				userWithOrg.Organization = org
 			}
@@ -312,8 +320,7 @@ func (h *Handler) AdminCleanupService(c *gin.Context) {
 	}
 
 	// Get service manager
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get the service by type
 	service, exists := serviceManager.GetServiceByType(req.ServiceType)
@@ -324,8 +331,8 @@ func (h *Handler) AdminCleanupService(c *gin.Context) {
 
 	// Configure service with service config if provided
 	if req.ServiceConfigID != "" {
-		serviceConfig, exists := serviceConfigManager.GetServiceConfig(req.ServiceConfigID)
-		if !exists {
+		serviceConfig, err := h.repo.GetServiceConfigByID(req.ServiceConfigID)
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service config '%s' not found", req.ServiceConfigID)})
 			return
 		}
@@ -376,10 +383,12 @@ func (h *Handler) AdminCleanupService(c *gin.Context) {
 // @Failure 403 {object} map[string]interface{} "Forbidden"
 // @Router /admin/cleanup/services [get]
 func (h *Handler) AdminGetAvailableServices(c *gin.Context) {
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-
-	// Get all service configs
-	serviceConfigs := serviceConfigManager.GetAllServiceConfigs()
+	// Get all service configs from database
+	serviceConfigs, err := h.repo.GetAllServiceConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service configs"})
+		return
+	}
 
 	// Group by service type
 	servicesByType := make(map[string][]ServiceInfo)
@@ -429,7 +438,7 @@ func (h *Handler) AdminGetAvailableServices(c *gin.Context) {
 
 // AdminCleanupServiceByID handles cleanup for a specific service config by ID and lab UUID (admin only)
 // @Summary Cleanup a specific service config for a lab by UUID (admin)
-// @Description Clean up resources for a specific service config using the service config ID and lab UUID - automatically constructs all resource names (admin only)
+// @Description Clean up resources for a specific service config using the service config ID and lab UUID - automatically constructs all resource names (admin only). Supports comma-delimited UUIDs for bulk cleanup.
 // @Tags admin
 // @Accept json
 // @Produce json
@@ -458,13 +467,22 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 		return
 	}
 
+	// Parse comma-delimited UUIDs
+	labIDs := strings.Split(req.LabID, ",")
+	for i, labID := range labIDs {
+		labIDs[i] = strings.TrimSpace(labID)
+		if labIDs[i] == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "empty lab_id found in comma-delimited list"})
+			return
+		}
+	}
+
 	// Get service manager
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get the specific service config
-	serviceConfig, exists := serviceConfigManager.GetServiceConfig(req.ServiceConfigID)
-	if !exists {
+	serviceConfig, err := h.repo.GetServiceConfigByID(req.ServiceConfigID)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Service config '%s' not found", req.ServiceConfigID)})
 		return
 	}
@@ -477,50 +495,92 @@ func (h *Handler) AdminCleanupServiceByID(c *gin.Context) {
 	}
 
 	// Configure service with the specific service config
-	if configurableService, ok := service.(interface {
+	// Handle different ConfigureFromServiceConfig signatures
+	switch s := service.(type) {
+	case interface {
 		ConfigureFromServiceConfig(*models.ServiceConfig)
-	}); ok {
-		configurableService.ConfigureFromServiceConfig(serviceConfig)
+	}:
+		// Services that take *models.ServiceConfig (palette_project, palette_tenant)
+		s.ConfigureFromServiceConfig(serviceConfig)
+	case interface {
+		ConfigureFromServiceConfig(models.ServiceConfigMap, string)
+	}:
+		// Services that take (ServiceConfigMap, string) (terraform_cloud)
+		// For multiple lab IDs, we'll configure with the first one for the service setup
+		s.ConfigureFromServiceConfig(serviceConfig.Config, labIDs[0])
+	case interface {
+		ConfigureFromServiceConfig(models.ServiceConfigMap)
+	}:
+		// Services that take ServiceConfigMap (guacamole, proxmox_user)
+		s.ConfigureFromServiceConfig(serviceConfig.Config)
 	}
 
-	// Create cleanup context with auto-constructed parameters
-	cleanupCtx := &interfaces.CleanupContext{
-		LabID:   req.LabID,
-		Context: c.Request.Context(),
-		Lab:     nil, // No lab instance for admin cleanup
+	// Track cleanup results for all lab IDs
+	allResults := make(map[string]interface{})
+	allErrors := make(map[string]interface{})
+	totalSuccessful := 0
+	totalFailed := 0
+
+	// Process each lab ID
+	for _, labID := range labIDs {
+		// Create cleanup context with auto-constructed parameters
+		cleanupCtx := &interfaces.CleanupContext{
+			LabID:   labID,
+			Context: c.Request.Context(),
+			Lab:     nil, // No lab instance for admin cleanup
+		}
+
+		// Auto-construct parameters based on service type
+		switch serviceConfig.Type {
+		case "palette_project":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", labID))
+		case "palette_tenant":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("lab-%s", labID))
+		case "proxmox_user":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", labID))
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", labID))
+		case "terraform_cloud":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", labID))
+		case "guacamole":
+			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", labID))
+		}
+
+		// Execute cleanup
+		err := service.ExecuteCleanup(cleanupCtx)
+		if err != nil {
+			allErrors[labID] = err.Error()
+			totalFailed++
+		} else {
+			allResults[labID] = map[string]interface{}{
+				"message":                    fmt.Sprintf("Service config '%s' cleanup completed successfully", req.ServiceConfigID),
+				"auto_constructed_resources": getAutoConstructedResources(serviceConfig.Type, labID),
+			}
+			totalSuccessful++
+		}
 	}
 
-	// Auto-construct parameters based on service type
-	switch serviceConfig.Type {
-	case "palette_project":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", req.LabID))
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", req.LabID))
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", req.LabID))
-	case "palette_tenant":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", req.LabID))
-	case "proxmox_user":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", req.LabID))
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", req.LabID))
-	case "terraform_cloud":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", req.LabID))
-	case "guacamole":
-		cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", req.LabID))
+	// Prepare response
+	response := gin.H{
+		"message":           fmt.Sprintf("Service config '%s' cleanup completed for %d lab(s)", req.ServiceConfigID, len(labIDs)),
+		"service_config_id": req.ServiceConfigID,
+		"service_type":      serviceConfig.Type,
+		"lab_ids":           labIDs,
+		"results":           allResults,
+		"errors":            allErrors,
+		"successful":        totalSuccessful,
+		"failed":            totalFailed,
 	}
 
-	// Execute cleanup
-	err := service.ExecuteCleanup(cleanupCtx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to cleanup service config '%s': %v", req.ServiceConfigID, err)})
-		return
+	// Determine HTTP status
+	if totalFailed > 0 && totalSuccessful == 0 {
+		c.JSON(http.StatusInternalServerError, response)
+	} else if totalFailed > 0 {
+		c.JSON(http.StatusPartialContent, response)
+	} else {
+		c.JSON(http.StatusOK, response)
 	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message":                    fmt.Sprintf("Service config '%s' cleanup completed successfully", req.ServiceConfigID),
-		"service_config_id":          req.ServiceConfigID,
-		"service_type":               serviceConfig.Type,
-		"lab_id":                     req.LabID,
-		"auto_constructed_resources": getAutoConstructedResources(serviceConfig.Type, req.LabID),
-	})
 }
 
 // getAutoConstructedResources returns the list of auto-constructed resource names for a service type
@@ -533,7 +593,7 @@ func getAutoConstructedResources(serviceType, labID string) map[string]string {
 		resources["user_email"] = fmt.Sprintf("lab+%s@spectrocloud.com", labID)
 		resources["api_key_name"] = fmt.Sprintf("lab-%s-api-key", labID)
 	case "palette_tenant":
-		resources["tenant_id"] = fmt.Sprintf("tenant-%s", labID)
+		resources["tenant_id"] = fmt.Sprintf("lab-%s", labID)
 	case "proxmox_user":
 		resources["username"] = fmt.Sprintf("lab-%s@pve", labID)
 		resources["pool_name"] = fmt.Sprintf("lab-%s-pool", labID)
@@ -548,7 +608,7 @@ func getAutoConstructedResources(serviceType, labID string) map[string]string {
 
 // AdminCleanupByLab handles simplified cleanup by lab UUID only (admin only)
 // @Summary Cleanup all services for a lab by UUID (admin)
-// @Description Clean up all resources for a lab using just the lab UUID - automatically constructs all resource names (admin only)
+// @Description Clean up all resources for a lab using just the lab UUID - automatically constructs all resource names (admin only). Supports comma-delimited UUIDs for bulk cleanup.
 // @Tags admin
 // @Accept json
 // @Produce json
@@ -573,88 +633,119 @@ func (h *Handler) AdminCleanupByLab(c *gin.Context) {
 		return
 	}
 
+	// Parse comma-delimited UUIDs
+	labIDs := strings.Split(req.LabID, ",")
+	for i, labID := range labIDs {
+		labIDs[i] = strings.TrimSpace(labID)
+		if labIDs[i] == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "empty lab_id found in comma-delimited list"})
+			return
+		}
+	}
+
 	// Get service manager
-	serviceConfigManager := h.labService.GetServiceConfigManager()
-	serviceManager := services.NewServiceManager(serviceConfigManager)
+	serviceManager := services.NewServiceManager(h.repo)
 
 	// Get all available service types
-	serviceConfigs := serviceConfigManager.GetAllServiceConfigs()
+	serviceConfigs, err := h.repo.GetAllServiceConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service configs"})
+		return
+	}
 	serviceTypes := make(map[string]bool)
 	for _, config := range serviceConfigs {
 		serviceTypes[config.Type] = true
 	}
 
-	// Track cleanup results
-	results := make(map[string]interface{})
-	errors := make(map[string]string)
+	// Track cleanup results for all lab IDs
+	allResults := make(map[string]interface{})
+	allErrors := make(map[string]interface{})
+	totalSuccessful := 0
+	totalFailed := 0
 
-	// Cleanup each service type
-	for serviceType := range serviceTypes {
-		service, exists := serviceManager.GetServiceByType(serviceType)
-		if !exists {
-			errors[serviceType] = "Service not available"
-			continue
-		}
+	// Process each lab ID
+	for _, labID := range labIDs {
+		labResults := make(map[string]interface{})
+		labErrors := make(map[string]string)
 
-		// Configure service with service config if available
-		for _, config := range serviceConfigs {
-			if config.Type == serviceType && config.IsActive {
-				if configurableService, ok := service.(interface {
-					ConfigureFromServiceConfig(*models.ServiceConfig)
-				}); ok {
-					configurableService.ConfigureFromServiceConfig(config)
+		// Cleanup each service type for this lab ID
+		for serviceType := range serviceTypes {
+			service, exists := serviceManager.GetServiceByType(serviceType)
+			if !exists {
+				labErrors[serviceType] = "Service not available"
+				continue
+			}
+
+			// Configure service with service config if available
+			for _, config := range serviceConfigs {
+				if config.Type == serviceType && config.IsActive {
+					if configurableService, ok := service.(interface {
+						ConfigureFromServiceConfig(*models.ServiceConfig)
+					}); ok {
+						configurableService.ConfigureFromServiceConfig(config)
+					}
+					break
 				}
-				break
+			}
+
+			// Create cleanup context with auto-constructed parameters
+			cleanupCtx := &interfaces.CleanupContext{
+				LabID:   labID,
+				Context: c.Request.Context(),
+				Lab:     nil, // No lab instance for admin cleanup
+			}
+
+			// Auto-construct common parameters based on service type
+			switch serviceType {
+			case "palette_project":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", labID))
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", labID))
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", labID))
+			case "palette_tenant":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", labID))
+			case "proxmox_user":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", labID))
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", labID))
+			case "terraform_cloud":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", labID))
+			case "guacamole":
+				cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", labID))
+			}
+
+			// Execute cleanup
+			err := service.ExecuteCleanup(cleanupCtx)
+			if err != nil {
+				labErrors[serviceType] = err.Error()
+			} else {
+				labResults[serviceType] = "Cleanup completed successfully"
 			}
 		}
 
-		// Create cleanup context with auto-constructed parameters
-		cleanupCtx := &interfaces.CleanupContext{
-			LabID:   req.LabID,
-			Context: c.Request.Context(),
-			Lab:     nil, // No lab instance for admin cleanup
+		// Store results for this lab ID
+		if len(labResults) > 0 {
+			allResults[labID] = labResults
+			totalSuccessful += len(labResults)
 		}
-
-		// Auto-construct common parameters based on service type
-		switch serviceType {
-		case "palette_project":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_project_name", fmt.Sprintf("lab-%s", req.LabID))
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_user_email", fmt.Sprintf("lab+%s@spectrocloud.com", req.LabID))
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_api_key_name", fmt.Sprintf("lab-%s-api-key", req.LabID))
-		case "palette_tenant":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "palette_tenant_id", fmt.Sprintf("tenant-%s", req.LabID))
-		case "proxmox_user":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_user_username", fmt.Sprintf("lab-%s@pve", req.LabID))
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "proxmox_pool_name", fmt.Sprintf("lab-%s-pool", req.LabID))
-		case "terraform_cloud":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "terraform_workspace_name", fmt.Sprintf("lab-%s-workspace", req.LabID))
-		case "guacamole":
-			cleanupCtx.Context = context.WithValue(cleanupCtx.Context, "guacamole_username", fmt.Sprintf("lab-%s", req.LabID))
-		}
-
-		// Execute cleanup
-		err := service.ExecuteCleanup(cleanupCtx)
-		if err != nil {
-			errors[serviceType] = err.Error()
-		} else {
-			results[serviceType] = "Cleanup completed successfully"
+		if len(labErrors) > 0 {
+			allErrors[labID] = labErrors
+			totalFailed += len(labErrors)
 		}
 	}
 
 	// Prepare response
 	response := gin.H{
-		"message":    "Lab cleanup completed",
-		"lab_id":     req.LabID,
-		"results":    results,
-		"errors":     errors,
-		"successful": len(results),
-		"failed":     len(errors),
+		"message":    fmt.Sprintf("Lab cleanup completed for %d lab(s)", len(labIDs)),
+		"lab_ids":    labIDs,
+		"results":    allResults,
+		"errors":     allErrors,
+		"successful": totalSuccessful,
+		"failed":     totalFailed,
 	}
 
 	// Determine HTTP status
-	if len(errors) > 0 && len(results) == 0 {
+	if totalFailed > 0 && totalSuccessful == 0 {
 		c.JSON(http.StatusInternalServerError, response)
-	} else if len(errors) > 0 {
+	} else if totalFailed > 0 {
 		c.JSON(http.StatusPartialContent, response)
 	} else {
 		c.JSON(http.StatusOK, response)
@@ -748,7 +839,11 @@ func getCleanupParametersForServiceType(serviceType string) []ParameterInfo {
 // @Success 200 {array} models.ServiceConfig
 // @Router /admin/service-configs [get]
 func (h *Handler) GetServiceConfigs(c *gin.Context) {
-	configs := h.labService.GetServiceConfigManager().GetAllServiceConfigs()
+	configs, err := h.repo.GetAllServiceConfigs()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service configs"})
+		return
+	}
 	c.JSON(http.StatusOK, configs)
 }
 
@@ -761,7 +856,11 @@ func (h *Handler) GetServiceConfigs(c *gin.Context) {
 // @Success 200 {array} models.ServiceLimit
 // @Router /admin/service-limits [get]
 func (h *Handler) GetServiceLimits(c *gin.Context) {
-	limits := h.labService.GetServiceConfigManager().GetAllServiceLimits()
+	limits, err := h.repo.GetAllServiceLimits()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve service limits"})
+		return
+	}
 	c.JSON(http.StatusOK, limits)
 }
 
@@ -800,7 +899,10 @@ func (h *Handler) CreateServiceConfig(c *gin.Context) {
 	config.CreatedAt = now
 	config.UpdatedAt = now
 
-	h.labService.GetServiceConfigManager().AddServiceConfig(&config)
+	if err := h.repo.CreateServiceConfig(&config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service config"})
+		return
+	}
 	c.JSON(http.StatusCreated, config)
 }
 
@@ -826,7 +928,10 @@ func (h *Handler) CreateServiceLimit(c *gin.Context) {
 	limit.CreatedAt = now
 	limit.UpdatedAt = now
 
-	h.labService.GetServiceConfigManager().AddServiceLimit(&limit)
+	if err := h.repo.CreateServiceLimit(&limit); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create service limit"})
+		return
+	}
 	c.JSON(http.StatusCreated, limit)
 }
 
@@ -853,7 +958,10 @@ func (h *Handler) UpdateServiceConfig(c *gin.Context) {
 	config.ID = id
 	config.UpdatedAt = time.Now()
 
-	h.labService.GetServiceConfigManager().AddServiceConfig(&config)
+	if err := h.repo.UpdateServiceConfig(&config); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update service config"})
+		return
+	}
 	c.JSON(http.StatusOK, config)
 }
 
@@ -880,7 +988,10 @@ func (h *Handler) UpdateServiceLimit(c *gin.Context) {
 	limit.ID = id
 	limit.UpdatedAt = time.Now()
 
-	h.labService.GetServiceConfigManager().AddServiceLimit(&limit)
+	if err := h.repo.UpdateServiceLimit(&limit); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update service limit"})
+		return
+	}
 	c.JSON(http.StatusOK, limit)
 }
 
@@ -895,7 +1006,10 @@ func (h *Handler) UpdateServiceLimit(c *gin.Context) {
 // @Router /admin/service-configs/{id} [delete]
 func (h *Handler) DeleteServiceConfig(c *gin.Context) {
 	id := c.Param("id")
-	h.labService.GetServiceConfigManager().RemoveServiceConfig(id)
+	if err := h.repo.DeleteServiceConfig(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service config"})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }
 
@@ -910,6 +1024,136 @@ func (h *Handler) DeleteServiceConfig(c *gin.Context) {
 // @Router /admin/service-limits/{id} [delete]
 func (h *Handler) DeleteServiceLimit(c *gin.Context) {
 	id := c.Param("id")
-	h.labService.GetServiceConfigManager().RemoveServiceLimit(id)
+	if err := h.repo.DeleteServiceLimit(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete service limit"})
+		return
+	}
 	c.Status(http.StatusNoContent)
+}
+
+// GetPendingLabs handles getting all pending labs (admin only)
+// @Summary Get pending labs (admin)
+// @Description Get all labs that are pending approval (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} models.LabResponse
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/labs/pending [get]
+func (h *Handler) GetPendingLabs(c *gin.Context) {
+	fmt.Printf("GetPendingLabs: Admin request received\n")
+
+	// Get user from context
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Printf("GetPendingLabs: No user found in context\n")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	fmt.Printf("GetPendingLabs: User %s (role: %s) requesting pending labs\n", userObj.Email, userObj.Role)
+
+	pendingLabs, err := h.labService.GetPendingLabs()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to retrieve pending labs"})
+		return
+	}
+	fmt.Printf("GetPendingLabs: Found %d pending labs\n", len(pendingLabs))
+
+	// Convert Labs to LabResponses
+	labResponses := make([]*models.LabResponse, len(pendingLabs))
+	for i, lab := range pendingLabs {
+		labResponses[i] = h.labService.ConvertLabToResponse(lab, h.authService)
+	}
+
+	c.JSON(http.StatusOK, labResponses)
+}
+
+// ApproveLab handles approving a pending lab (admin only)
+// @Summary Approve lab (admin)
+// @Description Approve a pending lab and start provisioning (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Lab ID"
+// @Success 200 {object} map[string]interface{} "Lab approved"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 404 {object} map[string]interface{} "Lab not found"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/labs/{id}/approve [post]
+func (h *Handler) ApproveLab(c *gin.Context) {
+	labID := c.Param("id")
+	if labID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	fmt.Printf("ApproveLab: Admin request to approve lab %s\n", labID)
+
+	// Get user from context
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Printf("ApproveLab: No user found in context\n")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	fmt.Printf("ApproveLab: User %s (role: %s) approving lab %s\n", userObj.Email, userObj.Role, labID)
+
+	err := h.labService.ApproveLab(labID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to approve lab: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Lab approved successfully"})
+}
+
+// RejectLab handles rejecting a pending lab (admin only)
+// @Summary Reject lab (admin)
+// @Description Reject a pending lab (admin only)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Lab ID"
+// @Success 200 {object} map[string]interface{} "Lab rejected"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 401 {object} map[string]interface{} "Unauthorized"
+// @Failure 403 {object} map[string]interface{} "Forbidden"
+// @Failure 404 {object} map[string]interface{} "Lab not found"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /admin/labs/{id}/reject [post]
+func (h *Handler) RejectLab(c *gin.Context) {
+	labID := c.Param("id")
+	if labID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Lab ID is required"})
+		return
+	}
+
+	fmt.Printf("RejectLab: Admin request to reject lab %s\n", labID)
+
+	// Get user from context
+	user, exists := c.Get("user")
+	if !exists {
+		fmt.Printf("RejectLab: No user found in context\n")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in context"})
+		return
+	}
+
+	userObj := user.(*models.User)
+	fmt.Printf("RejectLab: User %s (role: %s) rejecting lab %s\n", userObj.Email, userObj.Role, labID)
+
+	err := h.labService.RejectLab(labID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to reject lab: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Lab rejected successfully"})
 }

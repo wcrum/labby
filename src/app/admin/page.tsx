@@ -26,7 +26,10 @@ import {
   Users,
   Activity,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  FlaskConical,
+  Check,
+  FlaskConicalOff,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { LabSession } from "@/types/lab";
@@ -57,33 +60,21 @@ function AdminPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm] = useState("");
-  const [statusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [serviceUsage, setServiceUsage] = useState<ServiceUsage[]>([]);
   const [serviceConfigs, setServiceConfigs] = useState<ServiceConfig[]>([]);
   const [serviceLimits, setServiceLimits] = useState<ServiceLimit[]>([]);
   const [showStopDialog, setShowStopDialog] = useState(false);
   const [selectedLab, setSelectedLab] = useState<LabSession | null>(null);
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject' | null>(null);
 
   const handleStopLab = async () => {
     if (!selectedLab) return;
 
     try {
-      // Stop the lab first
+      // Stop the lab - this will automatically cleanup all resources and mark as expired
       await apiService.adminStopLab(selectedLab.id);
-      
-      // Then cleanup any remaining resources
-      try {
-        await apiService.cleanupLab(selectedLab.id);
-      } catch (cleanupError) {
-        console.warn('Cleanup failed (lab may already be cleaned up):', cleanupError);
-      }
-      
-      // Finally delete the lab record
-      try {
-        await apiService.adminDeleteLab(selectedLab.id);
-      } catch (deleteError) {
-        console.warn('Delete failed (lab may already be deleted):', deleteError);
-      }
       
       // Refresh the labs list
       const data = await fetchAllLabSessions();
@@ -94,6 +85,32 @@ function AdminPageContent() {
       console.error('Failed to stop lab:', error);
       setError('Failed to stop lab');
     }
+  };
+
+  const handleApprovalAction = async () => {
+    if (!selectedLab || !approvalAction) return;
+
+    try {
+      if (approvalAction === 'approve') {
+        await apiService.approveLab(selectedLab.id);
+      } else if (approvalAction === 'reject') {
+        await apiService.rejectLab(selectedLab.id);
+      }
+      
+      // Refresh the labs list
+      const data = await fetchAllLabSessions();
+      setLabs(data);
+      setShowApprovalDialog(false);
+      setSelectedLab(null);
+      setApprovalAction(null);
+    } catch (error) {
+      console.error(`Failed to ${approvalAction} lab:`, error);
+      setError(`Failed to ${approvalAction} lab`);
+    }
+  };
+
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status);
   };
 
   // Get countdown data for all labs using a single hook
@@ -152,12 +169,22 @@ function AdminPageContent() {
     const matchesSearch = lab.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (lab.owner?.name || "Unknown").toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (lab.owner?.email || "unknown").toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || lab.status === statusFilter;
+    
+    let matchesStatus = false;
+    if (statusFilter === "all") {
+      matchesStatus = true;
+    } else if (statusFilter === "error") {
+      matchesStatus = lab.status === "error" || lab.status === "expired";
+    } else {
+      matchesStatus = lab.status === statusFilter;
+    }
+    
     return matchesSearch && matchesStatus;
   });
 
   const stats = {
     total: labs.length,
+    pending: labs.filter(l => l.status === "pending").length,
     ready: labs.filter(l => l.status === "ready").length,
     provisioning: labs.filter(l => l.status === "provisioning").length,
     error: labs.filter(l => l.status === "error").length,
@@ -222,52 +249,119 @@ function AdminPageContent() {
         )}
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="rounded-xl">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <Card 
+            className={`rounded-xl border-black dark:border-white cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "all" ? "ring-2 ring-black dark:ring-white shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("all")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Labs</p>
+                  <p className="text-sm font-medium text-black-foreground">Total Labs</p>
                   <p className="text-2xl font-bold">{stats.total}</p>
                 </div>
-                <Users className="h-8 w-8 text-muted-foreground" />
+                <FlaskConical className="h-8 w-8 text-black-foreground" />
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card 
+            className={`rounded-xl border-green-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "ready" ? "ring-2 ring-green-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("ready")}
+          >
             <CardContent className="p-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between ">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Ready</p>
+                  <p className="text-sm font-medium text-green-foreground">Ready</p>
                   <p className="text-2xl font-bold text-green-600">{stats.ready}</p>
                 </div>
-                <Activity className="h-8 w-8 text-green-600" />
+                <Check className="h-8 w-8 text-green-600" />
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card 
+            className={`rounded-xl border-blue-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "provisioning" ? "ring-2 ring-blue-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("provisioning")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Provisioning</p>
+                  <p className="text-sm font-medium text-blue-foreground">Provisioning</p>
                   <p className="text-2xl font-bold text-blue-600">{stats.provisioning}</p>
                 </div>
                 <RefreshCw className="h-8 w-8 text-blue-600" />
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-xl">
+          <Card 
+            className={`rounded-xl border-orange-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "pending" ? "ring-2 ring-orange-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("pending")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Errors & Expired</p>
+                  <p className="text-sm font-medium text-orange-foreground">Pending</p>
+                  <p className="text-2xl font-bold text-orange-600">{stats.pending}</p>
+                </div>
+                <AlertTriangle className="h-8 w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card 
+            className={`rounded-xl border-red-600 cursor-pointer transition-all hover:shadow-md ${
+              statusFilter === "error" || statusFilter === "expired" ? "ring-2 ring-red-600 shadow-lg" : ""
+            }`}
+            onClick={() => handleStatusFilter("error")}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-red-foreground">Errors & Expired</p>
                   <p className="text-2xl font-bold text-red-600">{stats.error + stats.expired}</p>
                 </div>
-                <ShieldCheck className="h-8 w-8 text-red-600" />
+                <FlaskConicalOff className="h-8 w-8 text-red-600" />
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Filter Status Indicator */}
+        {statusFilter !== "all" && (
+          <Card className="rounded-xl border-blue-200 bg-blue-50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-blue-800">
+                    Filtering by: <Badge variant="secondary" className="ml-1">
+                      {statusFilter === "error" ? "Errors & Expired" : 
+                       statusFilter === "ready" ? "Ready" :
+                       statusFilter === "provisioning" ? "Provisioning" :
+                       statusFilter === "pending" ? "Pending" : statusFilter}
+                    </Badge>
+                  </span>
+                  <span className="text-sm text-blue-600">
+                    ({filteredLabs.length} of {labs.length} labs)
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleStatusFilter("all")}
+                  className="text-blue-600 border-blue-300 hover:bg-blue-100"
+                >
+                  Clear Filter
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Service Usage Section */}
         <Card className="rounded-xl">
@@ -367,7 +461,12 @@ function AdminPageContent() {
                   <div className="space-y-2">
                     <div className="flex items-center gap-3">
                       <h3 className="text-xl font-semibold">{lab.name}</h3>
-                      <Badge variant={lab.status === "ready" ? "default" : lab.status === "provisioning" ? "secondary" : "destructive"}>
+                      <Badge variant={
+                        lab.status === "ready" ? "default" : 
+                        lab.status === "provisioning" ? "secondary" : 
+                        lab.status === "pending" ? "outline" : 
+                        "destructive"
+                      }>
                         {lab.status.toUpperCase()}
                       </Badge>
                     </div>
@@ -395,6 +494,32 @@ function AdminPageContent() {
                           View Details
                         </a>
                       </Button>
+                      {lab.status === 'pending' && (
+                        <>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedLab(lab);
+                              setApprovalAction('approve');
+                              setShowApprovalDialog(true);
+                            }}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedLab(lab);
+                              setApprovalAction('reject');
+                              setShowApprovalDialog(true);
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </>
+                      )}
                       {lab.status === 'ready' && (
                         <Button
                           variant="destructive"
@@ -493,7 +618,7 @@ function AdminPageContent() {
           <AlertDialogHeader>
             <AlertDialogTitle>Stop Lab</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to stop lab &quot;{selectedLab?.name}&quot;? This will delete all resources and cannot be undone.
+              Are you sure you want to stop lab &quot;{selectedLab?.name}&quot;? This will cleanup all resources (Terraform workspaces, Palette projects, Proxmox users, Guacamole users, etc.) and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -503,6 +628,36 @@ function AdminPageContent() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Stop Lab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Lab Approval Dialog */}
+      <AlertDialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {approvalAction === 'approve' ? 'Approve Lab' : 'Reject Lab'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to {approvalAction} lab &quot;{selectedLab?.name}&quot;? 
+              {approvalAction === 'approve' 
+                ? ' This will start the lab provisioning process.' 
+                : ' This will mark the lab as rejected and it will not be provisioned.'
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleApprovalAction}
+              className={approvalAction === 'approve' 
+                ? "bg-green-600 text-white hover:bg-green-700" 
+                : "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              }
+            >
+              {approvalAction === 'approve' ? 'Approve' : 'Reject'} Lab
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

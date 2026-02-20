@@ -3,11 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 
 	internalclient "github.com/spectrocloud/palette-sdk-go-internal/client"
 
@@ -25,9 +25,20 @@ type PaletteTenantService struct {
 // NewPaletteTenantService creates a new Palette Tenant service instance
 func NewPaletteTenantService() *PaletteTenantService {
 	return &PaletteTenantService{
-		host:           os.Getenv("palette_host"),
-		systemUsername: os.Getenv("palette_system_username"),
-		systemPassword: os.Getenv("palette_system_password"),
+		// Credentials will be set via ConfigureFromServiceConfig()
+	}
+}
+
+// ConfigureFromServiceConfig configures the service with credentials from service config
+func (v *PaletteTenantService) ConfigureFromServiceConfig(serviceConfig *models.ServiceConfig) {
+	if host, exists := serviceConfig.Config.GetString("palette_host"); exists {
+		v.host = host
+	}
+	if systemUsername, exists := serviceConfig.Config.GetString("palette_system_username"); exists {
+		v.systemUsername = systemUsername
+	}
+	if systemPassword, exists := serviceConfig.Config.GetString("palette_system_password"); exists {
+		v.systemPassword = systemPassword
 	}
 }
 
@@ -276,7 +287,7 @@ func (v *PaletteTenantService) ExecuteSetup(ctx *interfaces.SetupContext) error 
 	// Store in lab's ServiceData for persistence
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["palette_tenant_id"] = tenantID
 		// Store tenant spec data as JSON string
@@ -419,12 +430,12 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 				fmt.Printf("Retrieved tenant ID from lab ServiceData: %s\n", tenantID)
 			} else {
 				// If tenant ID is not in context, construct it from lab ID
-				tenantID = fmt.Sprintf("tenant-%s", shortID)
+				tenantID = fmt.Sprintf("lab-%s", shortID)
 				fmt.Printf("Warning: palette tenant ID not found in context or lab data, using constructed tenant ID: %s\n", tenantID)
 			}
 		} else {
 			// If tenant ID is not in context, construct it from lab ID
-			tenantID = fmt.Sprintf("tenant-%s", shortID)
+			tenantID = fmt.Sprintf("lab-%s", shortID)
 			fmt.Printf("Warning: palette tenant ID not found in context, using constructed tenant ID: %s\n", tenantID)
 		}
 	}
@@ -458,6 +469,20 @@ func (v *PaletteTenantService) ExecuteCleanup(ctx *interfaces.CleanupContext) er
 			fmt.Printf("Warning: Failed to delete tenant: %v\n", err)
 		} else {
 			fmt.Printf("  Tenant deleted successfully\n")
+		}
+
+		fmt.Printf(" - Cleaning up tenant: %s\n", tenantID)
+		if err := pc.CleanUpTenant(tenantID, false); err != nil {
+			fmt.Printf("Warning: Failed to cleanup tenant: %v\n", err)
+			fmt.Printf(" - Force Cleaning up tenant: %s\n", tenantID)
+			err := pc.CleanUpTenant(tenantID, true)
+			if err != nil {
+				fmt.Printf("  Tenant cleaned up successfully (Force Deleted)\n")
+			} else {
+				fmt.Printf("Warning: Failed to force cleanup tenant: %v\n", err)
+			}
+		} else {
+			fmt.Printf("  Tenant cleaned up successfully\n")
 		}
 	} else {
 		fmt.Printf("- Skipping tenant deletion (no valid tenant ID found)\n")

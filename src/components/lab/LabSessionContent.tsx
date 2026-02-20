@@ -94,7 +94,7 @@ export function LabSessionContent({ labId }: { labId: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Stop Lab</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to stop this lab? This will stop the lab, cleanup all resources, and cannot be undone.
+              Are you sure you want to stop this lab? This will cleanup all resources (Terraform workspaces, Palette projects, Proxmox users, Guacamole users, etc.) and cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

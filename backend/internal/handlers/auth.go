@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/wcrum/labby/internal/models"
-	"github.com/wcrum/labby/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,14 +32,21 @@ func (h *Handler) Login(c *gin.Context) {
 	// If invite code is provided, get the organization from the invite
 	var organizationID *string
 	if req.InviteCode != nil && *req.InviteCode != "" {
-		orgService := services.NewOrganizationService()
-		invite, err := orgService.GetInvite(*req.InviteCode)
+		invite, err := h.repo.GetInviteByID(*req.InviteCode)
 		if err != nil {
 			fmt.Printf("DEBUG: Failed to get invite %s: %v\n", *req.InviteCode, err)
 			// Continue with login even if invite is invalid
 		} else {
 			organizationID = &invite.OrganizationID
 			fmt.Printf("DEBUG: Found invite organization: %s\n", invite.OrganizationID)
+
+			// Verify the organization exists in the database
+			org, err := h.repo.GetOrganizationByID(invite.OrganizationID)
+			if err != nil {
+				fmt.Printf("DEBUG: Organization %s from invite does not exist in database: %v\n", invite.OrganizationID, err)
+			} else {
+				fmt.Printf("DEBUG: Verified organization exists: %s (ID: %s)\n", org.Name, org.ID)
+			}
 		}
 	}
 

@@ -25,6 +25,8 @@ export default function LabsPage() {
     try {
       setLoading(true);
       const data = await apiService.getTemplates();
+      console.log('Loaded templates:', data);
+      console.log('Template IDs:', data.map(t => ({ id: t.id, name: t.name })));
       setTemplates(data);
     } catch (err) {
       setError('Failed to load lab templates');
@@ -36,6 +38,7 @@ export default function LabsPage() {
 
   const handleCreateLab = async (templateId: string) => {
     try {
+      console.log('Creating lab with template ID:', templateId);
       setCreatingLab(templateId);
       const lab = await apiService.createLabFromTemplate(templateId);
       router.push(`/lab?id=${lab.id}`);
@@ -126,9 +129,16 @@ export default function LabsPage() {
                     <CardTitle className="text-lg">{template.name}</CardTitle>
                     <CardDescription>{template.description}</CardDescription>
                   </div>
-                  <Badge variant="outline" className="text-xs">
-                    {formatDuration(template.expiration_duration)}
-                  </Badge>
+                  <div className="flex flex-col gap-1">
+                    <Badge variant="outline" className="text-xs">
+                      {formatDuration(template.expiration_duration)}
+                    </Badge>
+                    {template.require_approval && (
+                      <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-800 border-orange-200">
+                        Requires Approval
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -159,17 +169,21 @@ export default function LabsPage() {
 
                 {/* Action Button */}
                 <Button
-                  onClick={() => handleCreateLab(template.id)}
+                  onClick={() => {
+                    console.log('Button clicked for template:', template);
+                    console.log('Template ID being passed:', template.id);
+                    handleCreateLab(template.id);
+                  }}
                   disabled={creatingLab === template.id}
                   className="w-full"
                 >
                   {creatingLab === template.id ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Creating Lab...
+                      {template.require_approval ? 'Requesting Lab...' : 'Creating Lab...'}
                     </>
                   ) : (
-                    'Start Lab'
+                    template.require_approval ? 'Request Lab' : 'Start Lab'
                   )}
                 </Button>
               </CardContent>

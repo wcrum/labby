@@ -28,8 +28,18 @@ RUN apk add --no-cache git
 # Set working directory
 WORKDIR /app
 
+# Copy .netrc for private repository access
+COPY .netrc /root/.netrc
+RUN chmod 600 /root/.netrc
+
 # Copy go mod files
 COPY backend/go.mod backend/go.sum ./
+
+# TEMPORARY: Copy local palette-sdk-go-internal dependency
+# This is a temporary workaround until upstream changes are made to the official palette-sdk-go-internal package.
+# The go.mod file contains a replace directive pointing to ../palette-sdk-go-internal
+# TODO: Remove this temporary copy once upstream changes are available
+COPY ../palette-sdk-go-internal /palette-sdk-go-internal
 
 # Download dependencies
 RUN go mod download
@@ -61,6 +71,8 @@ COPY --from=frontend-builder /app/out ./static
 
 # Copy backend templates
 COPY backend/templates ./templates
+
+COPY backend/service-configs ./service-configs
 
 # Copy environment example (optional, for reference)
 COPY backend/env.example ./

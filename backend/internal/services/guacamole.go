@@ -9,10 +9,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 
 	"github.com/sethvargo/go-password/password"
 )
@@ -28,26 +28,23 @@ type GuacamoleService struct {
 // NewGuacamoleService creates a new Guacamole service instance
 func NewGuacamoleService() *GuacamoleService {
 	return &GuacamoleService{
-		host:          os.Getenv("GUACAMOLE_HOST"),
-		adminUsername: os.Getenv("GUACAMOLE_ADMIN_USERNAME"),
-		adminPassword: os.Getenv("GUACAMOLE_ADMIN_PASSWORD"),
-		skipTLSVerify: os.Getenv("GUACAMOLE_SKIP_TLS_VERIFY") == "true",
+		// Credentials will be set via ConfigureFromServiceConfig()
 	}
 }
 
 // ConfigureFromServiceConfig configures the service from a service configuration
-func (v *GuacamoleService) ConfigureFromServiceConfig(config map[string]string) {
-	if host, ok := config["host"]; ok {
+func (v *GuacamoleService) ConfigureFromServiceConfig(config models.ServiceConfigMap) {
+	if host, exists := config.GetString("host"); exists {
 		v.host = host
 	}
-	if adminUsername, ok := config["admin_username"]; ok {
+	if adminUsername, exists := config.GetString("admin_username"); exists {
 		v.adminUsername = adminUsername
 	}
-	if adminPassword, ok := config["admin_password"]; ok {
+	if adminPassword, exists := config.GetString("admin_password"); exists {
 		v.adminPassword = adminPassword
 	}
-	if skipTLSVerify, ok := config["skip_tls_verify"]; ok {
-		v.skipTLSVerify = skipTLSVerify == "true"
+	if skipTLSVerify, exists := config.GetBool("skip_tls_verify"); exists {
+		v.skipTLSVerify = skipTLSVerify
 	}
 }
 
@@ -113,7 +110,7 @@ type GuacamoleTokenResponse struct {
 
 // authenticate performs authentication and gets auth token
 func (gc *GuacamoleClient) authenticate(username, password string) error {
-	loginURL := fmt.Sprintf("%s/guacamole/api/tokens", gc.baseURL)
+	loginURL := fmt.Sprintf("%s/api/tokens", gc.baseURL)
 
 	// Create form data
 	data := url.Values{}
@@ -163,7 +160,7 @@ type GuacamoleUserRequest struct {
 
 // createUser creates a new Guacamole user
 func (gc *GuacamoleClient) createUser(username, password string) error {
-	createURL := fmt.Sprintf("%s/guacamole/api/session/data/mysql/users", gc.baseURL)
+	createURL := fmt.Sprintf("%s/api/session/data/mysql/users", gc.baseURL)
 
 	// Create user request
 	userReq := GuacamoleUserRequest{
@@ -220,7 +217,7 @@ func (gc *GuacamoleClient) createUser(username, password string) error {
 
 // deleteUser deletes a Guacamole user
 func (gc *GuacamoleClient) deleteUser(username string) error {
-	deleteURL := fmt.Sprintf("%s/guacamole/api/session/data/mysql/users/%s", gc.baseURL, url.PathEscape(username))
+	deleteURL := fmt.Sprintf("%s/api/session/data/mysql/users/%s", gc.baseURL, url.PathEscape(username))
 
 	req, err := http.NewRequest("DELETE", deleteURL, nil)
 	if err != nil {
@@ -325,7 +322,7 @@ func (v *GuacamoleService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 	// Store in lab's ServiceData for persistence
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["guacamole_user_username"] = labUsername
 		ctx.Lab.ServiceData["guacamole_user_password"] = labPassword

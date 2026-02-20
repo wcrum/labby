@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/wcrum/labby/internal/models"
 
 	"github.com/go-openapi/strfmt"
-	"github.com/google/uuid"
 	"github.com/sethvargo/go-password/password"
 	"github.com/spectrocloud/palette-sdk-go/api/client/version1"
 	palettemodels "github.com/spectrocloud/palette-sdk-go/api/models"
@@ -30,9 +28,7 @@ type PaletteProjectService struct {
 // NewPaletteProjectService creates a new Palette Project service instance
 func NewPaletteProjectService() *PaletteProjectService {
 	return &PaletteProjectService{
-		host:       os.Getenv("PALETTE_HOST"),
-		apiKey:     os.Getenv("PALETTE_API_KEY"),
-		projectUID: os.Getenv("PALETTE_PROJECT_UID"),
+		// Credentials will be set via ConfigureFromServiceConfig()
 	}
 }
 
@@ -41,13 +37,13 @@ func (v *PaletteProjectService) ConfigureFromServiceConfig(serviceConfig *models
 	v.serviceConfig = serviceConfig
 
 	// Override environment variables with service config values
-	if host, ok := serviceConfig.Config["host"]; ok {
+	if host, exists := serviceConfig.Config.GetString("host"); exists {
 		v.host = host
 	}
-	if apiKey, ok := serviceConfig.Config["api_key"]; ok {
+	if apiKey, exists := serviceConfig.Config.GetString("api_key"); exists {
 		v.apiKey = apiKey
 	}
-	if projectUID, ok := serviceConfig.Config["project_uid"]; ok {
+	if projectUID, exists := serviceConfig.Config.GetString("project_uid"); exists {
 		v.projectUID = projectUID
 	}
 }
@@ -344,7 +340,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 	// Also store data in lab's ServiceData for persistent access during cleanup
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["palette_project_sandbox_id"] = shortID
 		ctx.Lab.ServiceData["palette_project_id"] = projectID
@@ -356,7 +352,7 @@ func (v *PaletteProjectService) ExecuteSetup(ctx *interfaces.SetupContext) error
 
 	// Add credentials to the lab
 	credential := &interfaces.Credential{
-		ID:        uuid.New().String(),
+		ID:        fmt.Sprintf("palette-project-%s", shortID),
 		LabID:     ctx.LabID,
 		Label:     "Palette Project",
 		Username:  userEntity.Spec.EmailID,

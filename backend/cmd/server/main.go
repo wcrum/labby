@@ -25,10 +25,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/wcrum/labby/internal/auth"
+	"github.com/wcrum/labby/internal/database"
 	"github.com/wcrum/labby/internal/handlers"
 	"github.com/wcrum/labby/internal/lab"
+	"github.com/wcrum/labby/internal/models"
 
 	_ "github.com/wcrum/labby/docs" // This will be generated
 
@@ -48,10 +51,47 @@ func main() {
 	// Get configuration from environment
 	jwtSecret := getEnv("JWT_SECRET", "your-secret-key-change-in-production")
 	port := getEnv("PORT", "8080")
+	corsAllowedOrigins := getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://tunnel.wcrum.dev")
+
+	// Log CORS configuration
+	parsedOrigins := parseOrigins(corsAllowedOrigins)
+	log.Printf("CORS Allowed Origins: %v", parsedOrigins)
+
+	log.Println("Initializing database connection...")
+	dbConfig := database.NewConfig()
+	db, err := database.Connect(dbConfig)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+
+	// Run database migrations
+	log.Println("Running database migrations...")
+	repo := database.NewRepository(db)
+	if err := repo.AutoMigrate(); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+	log.Println("Database migrations completed successfully")
 
 	// Initialize services
-	authService := auth.NewService(jwtSecret)
-	labService := lab.NewService()
+	authService := auth.NewService(jwtSecret, repo)
+	labService := lab.NewService(repo)
+
+	// Initialize OIDC service
+	oidcInternalIssuer := getEnv("OIDC_INTERNAL_ISSUER", "http://dex:5556/dex")
+	oidcExternalIssuer := getEnv("OIDC_EXTERNAL_ISSUER", "http://localhost:5556/dex")
+	oidcClientID := getEnv("OIDC_CLIENT_ID", "spectro-lab-client")
+	oidcClientSecret := getEnv("OIDC_CLIENT_SECRET", "spectro-lab-secret")
+	oidcRedirectURL := getEnv("OIDC_REDIRECT_URL", "http://localhost:8080/auth/callback")
+
+	log.Printf("Initializing OIDC service with internal issuer: %s, external issuer: %s", oidcInternalIssuer, oidcExternalIssuer)
+	oidcService, err := auth.NewOIDCService(oidcInternalIssuer, oidcExternalIssuer, oidcClientID, oidcClientSecret, oidcRedirectURL, repo, authService)
+	if err != nil {
+		log.Printf("ERROR: Failed to initialize OIDC service: %v", err)
+		log.Println("OIDC authentication will not be available")
+		oidcService = nil
+	} else {
+		log.Printf("OIDC service initialized successfully")
+	}
 
 	// Load lab templates
 	if err := labService.LoadTemplates("./templates"); err != nil {
@@ -78,7 +118,30 @@ func main() {
 	log.Printf("Enriching templates with service type information")
 	labService.EnrichTemplatesWithServiceTypes()
 
-	handler := handlers.NewHandler(authService, labService)
+	handler := handlers.NewHandler(authService, oidcService, labService, repo)
+
+	// Create a default organization
+	defaultOrg := &models.Organization{
+		ID:          "default",
+		Name:        "SpectroCloud",
+		Description: "Default organization for SpectroCloud labs",
+		Domain:      "spectrocloud.com",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Check if default organization already exists
+	existingOrg, err := repo.GetOrganizationByID("default")
+	if err != nil {
+		// Organization doesn't exist, create it
+		if err := repo.CreateOrganization(defaultOrg); err != nil {
+			log.Printf("Failed to create default organization: %v", err)
+		} else {
+			log.Printf("Created default organization: %s", defaultOrg.Name)
+		}
+	} else {
+		log.Printf("Default organization already exists: %s", existingOrg.Name)
+	}
 
 	// Create a default admin user
 	adminUser, err := authService.CreateAdminUser("admin@spectrocloud.com", "Admin User")
@@ -97,7 +160,7 @@ func main() {
 
 	// Add CORS middleware for development
 	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000", "https://tunnel.wcrum.dev"},
+		AllowedOrigins:   parsedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowCredentials: true,
@@ -152,11 +215,21 @@ func main() {
 	// Health check endpoint
 	router.GET("/health", handler.HealthCheck)
 
+	// Configuration endpoint
+	router.GET("/api/config", handler.GetConfig)
+
 	// Swagger documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Public routes
 	router.POST("/api/auth/login", handler.Login)
+
+	// OIDC routes
+	if oidcService != nil {
+		router.GET("/api/auth/oidc/login", handler.OIDCLogin)
+		router.GET("/api/auth/oidc/callback", handler.OIDCCallback)
+		router.POST("/api/auth/oidc/logout", handler.OIDCLogout)
+	}
 
 	// Public invite routes
 	router.GET("/api/invites/:id", handler.GetInvite)
@@ -192,6 +265,9 @@ func main() {
 	admin.Use(handler.AuthMiddleware(), handler.AdminMiddleware())
 	{
 		admin.GET("/labs", handler.GetAllLabs)
+		admin.GET("/labs/pending", handler.GetPendingLabs)
+		admin.POST("/labs/:id/approve", handler.ApproveLab)
+		admin.POST("/labs/:id/reject", handler.RejectLab)
 		admin.POST("/labs/:id/stop", handler.AdminStopLab)
 		admin.DELETE("/labs/:id", handler.AdminDeleteLab)
 		admin.POST("/labs/:id/cleanup", handler.CleanupLab)
@@ -210,6 +286,11 @@ func main() {
 		admin.POST("/organizations", handler.CreateOrganization)
 		admin.GET("/organizations/:id", handler.GetOrganization)
 		admin.POST("/organizations/:id/invites", handler.CreateInvite)
+		admin.GET("/organizations/:id/invites", handler.GetOrganizationInvites)
+
+		// Invite management
+		admin.GET("/invites", handler.GetAllInvites)
+		admin.GET("/invites/usage", handler.GetInviteUsageStats)
 
 		// Service configuration and limit management
 		admin.GET("/service-configs", handler.GetServiceConfigs)
@@ -236,4 +317,24 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// parseOrigins parses a comma-separated string of origins into a slice
+func parseOrigins(origins string) []string {
+	if origins == "" {
+		return []string{}
+	}
+
+	// Split by comma and trim whitespace
+	parts := strings.Split(origins, ",")
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
 }

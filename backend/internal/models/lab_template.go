@@ -11,6 +11,7 @@ type LabTemplate struct {
 	Description        string             `yaml:"description" json:"description"`
 	ExpirationDuration string             `yaml:"expiration_duration" json:"expiration_duration"`
 	Owner              string             `yaml:"owner" json:"owner"`
+	RequireApproval    bool               `yaml:"require_approval" json:"require_approval"`
 	CreatedAt          time.Time          `yaml:"created_at" json:"created_at"`
 	Services           []ServiceReference `yaml:"services" json:"services"`
 }
@@ -65,11 +66,13 @@ func (ltm *LabTemplateManager) GetAllTemplates() []*LabTemplate {
 }
 
 // EnrichTemplatesWithServiceTypes enriches all templates with service type information
-func (ltm *LabTemplateManager) EnrichTemplatesWithServiceTypes(serviceConfigManager *ServiceConfigManager) {
+func (ltm *LabTemplateManager) EnrichTemplatesWithServiceTypes(repo interface {
+	GetServiceConfigByID(id string) (*ServiceConfig, error)
+}) {
 	for _, template := range ltm.templates {
 		for i := range template.Services {
 			serviceRef := &template.Services[i]
-			if serviceConfig, exists := serviceConfigManager.GetServiceConfig(serviceRef.ServiceID); exists {
+			if serviceConfig, err := repo.GetServiceConfigByID(serviceRef.ServiceID); err == nil {
 				serviceRef.Type = serviceConfig.Type
 				serviceRef.Logo = serviceConfig.Logo
 			}

@@ -13,12 +13,12 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 	if !exists {
 		s.progressTracker.FailProgress(labID, "Template not found")
 		// Set lab status to error
-		s.mu.Lock()
-		if lab, exists := s.labs[labID]; exists {
+		lab, err := s.repo.GetLabByID(labID)
+		if err == nil {
 			lab.Status = models.LabStatusError
 			lab.UpdatedAt = time.Now()
+			s.repo.UpdateLab(lab)
 		}
-		s.mu.Unlock()
 		return
 	}
 
@@ -27,8 +27,8 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 	// Add services to progress tracker based on template
 	for _, serviceRef := range template.Services {
 		// Get the service configuration
-		serviceConfig, exists := s.serviceConfigManager.GetServiceConfig(serviceRef.ServiceID)
-		if !exists {
+		serviceConfig, err := s.repo.GetServiceConfigByID(serviceRef.ServiceID)
+		if err != nil {
 			s.progressTracker.AddLog(labID, fmt.Sprintf("Service configuration not found: %s", serviceRef.ServiceID))
 			continue
 		}
@@ -78,8 +78,8 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 	hasFailures := false
 	for _, serviceRef := range template.Services {
 		// Get the service configuration
-		serviceConfig, exists := s.serviceConfigManager.GetServiceConfig(serviceRef.ServiceID)
-		if !exists {
+		serviceConfig, err := s.repo.GetServiceConfigByID(serviceRef.ServiceID)
+		if err != nil {
 			s.progressTracker.AddLog(labID, fmt.Sprintf("Service configuration not found: %s", serviceRef.ServiceID))
 			continue
 		}
@@ -102,11 +102,10 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 		}
 
 		// Check if the lab status is now error (indicating a failure)
-		s.mu.RLock()
-		if lab, exists := s.labs[labID]; exists && lab.Status == models.LabStatusError {
+		lab, err := s.repo.GetLabByID(labID)
+		if err == nil && lab.Status == models.LabStatusError {
 			hasFailures = true
 		}
-		s.mu.RUnlock()
 
 		// If we have failures, stop provisioning
 		if hasFailures {
@@ -114,10 +113,8 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 		}
 	}
 
-	s.mu.Lock()
-	lab, exists := s.labs[labID]
-	if !exists {
-		s.mu.Unlock()
+	lab, err := s.repo.GetLabByID(labID)
+	if err != nil {
 		s.progressTracker.FailProgress(labID, "Lab not found")
 		return
 	}
@@ -136,5 +133,6 @@ func (s *Service) provisionLabFromTemplate(labID, templateID string) {
 		}
 		s.progressTracker.AddLog(labID, "Lab setup failed due to service errors")
 	}
-	s.mu.Unlock()
+	// Update the lab in the database
+	s.repo.UpdateLab(lab)
 }

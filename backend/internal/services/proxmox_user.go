@@ -8,11 +8,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/wcrum/labby/internal/interfaces"
+	"github.com/wcrum/labby/internal/models"
 
 	"github.com/sethvargo/go-password/password"
 )
@@ -28,26 +28,23 @@ type ProxmoxUserService struct {
 // NewProxmoxUserService creates a new Proxmox user service instance
 func NewProxmoxUserService() *ProxmoxUserService {
 	return &ProxmoxUserService{
-		uri:           os.Getenv("PROXMOX_URI"),
-		adminUser:     os.Getenv("PROXMOX_ADMIN_USER"),
-		adminPass:     os.Getenv("PROXMOX_ADMIN_PASS"),
-		skipTLSVerify: os.Getenv("PROXMOX_SKIP_TLS_VERIFY") == "true",
+		// Credentials will be set via ConfigureFromServiceConfig()
 	}
 }
 
 // ConfigureFromServiceConfig configures the service from a service configuration
-func (v *ProxmoxUserService) ConfigureFromServiceConfig(config map[string]string) {
-	if uri, ok := config["uri"]; ok {
+func (v *ProxmoxUserService) ConfigureFromServiceConfig(config models.ServiceConfigMap) {
+	if uri, exists := config.GetString("uri"); exists {
 		v.uri = uri
 	}
-	if adminUser, ok := config["admin_user"]; ok {
+	if adminUser, exists := config.GetString("admin_user"); exists {
 		v.adminUser = adminUser
 	}
-	if adminPass, ok := config["admin_pass"]; ok {
+	if adminPass, exists := config.GetString("admin_pass"); exists {
 		v.adminPass = adminPass
 	}
-	if skipTLSVerify, ok := config["skip_tls_verify"]; ok {
-		v.skipTLSVerify = skipTLSVerify == "true"
+	if skipTLSVerify, exists := config.GetBool("skip_tls_verify"); exists {
+		v.skipTLSVerify = skipTLSVerify
 	}
 }
 
@@ -405,7 +402,7 @@ func (v *ProxmoxUserService) ExecuteSetup(ctx *interfaces.SetupContext) error {
 	// Store in lab's ServiceData for persistence
 	if ctx.Lab != nil {
 		if ctx.Lab.ServiceData == nil {
-			ctx.Lab.ServiceData = make(map[string]string)
+			ctx.Lab.ServiceData = make(models.StringMap)
 		}
 		ctx.Lab.ServiceData["proxmox_user_username"] = labUsername
 		ctx.Lab.ServiceData["proxmox_user_password"] = labPassword
@@ -464,7 +461,7 @@ func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) erro
 		skipTLSVerify = skipTLSVerifyStr == "true"
 	}
 
-	// Fallback to environment variables if not in ServiceData
+	// Fallback to service configuration if not in ServiceData
 	if uri == "" {
 		uri = v.uri
 	}
@@ -473,6 +470,10 @@ func (v *ProxmoxUserService) ExecuteCleanup(ctx *interfaces.CleanupContext) erro
 	}
 	if adminPass == "" {
 		adminPass = v.adminPass
+	}
+	// Note: skipTLSVerify defaults to false if not found in ServiceData, so we use the service's configured value
+	if ctx.Lab == nil || ctx.Lab.ServiceData == nil || ctx.Lab.ServiceData["proxmox_skip_tls_verify"] == "" {
+		skipTLSVerify = v.skipTLSVerify
 	}
 
 	// Validate required configuration

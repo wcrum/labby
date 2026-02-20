@@ -148,7 +148,7 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 	now := time.Now()
 
 	// Extract service IDs from template for tracking
-	usedServices := make([]string, 0, len(template.Services))
+	usedServices := make(models.StringArray, 0, len(template.Services))
 	for _, service := range template.Services {
 		fmt.Printf("TemplateLoader.CreateLabFromTemplate: Adding service %s (ID: %s) to used services\n", service.Name, service.ServiceID)
 		usedServices = append(usedServices, service.ServiceID)
@@ -159,10 +159,17 @@ func (tl *TemplateLoader) CreateLabFromTemplate(templateID, ownerID string) (*mo
 
 	fmt.Printf("TemplateLoader.CreateLabFromTemplate: Generated lab ID: %s, name: %s\n", labID, labName)
 
+	// Determine initial status based on approval requirement
+	initialStatus := models.LabStatusProvisioning
+	if template.RequireApproval {
+		initialStatus = models.LabStatusPending
+		fmt.Printf("TemplateLoader.CreateLabFromTemplate: Template requires approval, setting status to pending\n")
+	}
+
 	lab := &models.Lab{
 		ID:           labID,
 		Name:         labName,
-		Status:       models.LabStatusProvisioning,
+		Status:       initialStatus,
 		OwnerID:      ownerID,
 		StartedAt:    now,
 		EndsAt:       now.Add(duration),

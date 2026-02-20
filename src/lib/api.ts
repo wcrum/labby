@@ -1,6 +1,7 @@
 // API service for communicating with the backend
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// We'll determine the API URL at runtime by calling the config endpoint
+let API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export type UserRole = 'user' | 'admin';
 
@@ -52,7 +53,7 @@ export interface Lab {
 export interface LabResponse {
   id: string;
   name: string;
-  status: 'provisioning' | 'ready' | 'error' | 'expired';
+  status: 'pending' | 'provisioning' | 'ready' | 'error' | 'expired';
   owner: User;
   started_at: string;
   ends_at: string;
@@ -91,6 +92,7 @@ export interface LabTemplate {
   description: string;
   expiration_duration: string;
   owner: string;
+  require_approval: boolean;
   created_at: string;
   services: ServiceTemplate[];
 }
@@ -141,10 +143,41 @@ export interface Invite {
   expires_at: string;
   created_at: string;
   accepted_at?: string;
+  usage_limit?: number;
+  usage_count: number;
+  last_used_at?: string;
+  used_by: string[];
+}
+
+export interface CreateInviteRequest {
+  email: string;
+  role: string;
+  usage_limit?: number;
+}
+
+export interface InviteUsageStats {
+  invite_id: string;
+  email: string;
+  organization_name: string;
+  usage_count: number;
+  usage_limit?: number;
+  last_used_at?: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  used_by: UserInfo[];
+}
+
+export interface UserInfo {
+  id: string;
+  email: string;
+  name: string;
+  used_at: string;
 }
 
 class ApiService {
   private token: string | null = null;
+  private initialized: boolean = false;
 
   setToken(token: string) {
     this.token = token;
@@ -167,10 +200,33 @@ class ApiService {
     }
   }
 
+  // Initialize API URL from config endpoint
+  async initializeConfig(): Promise<void> {
+    if (this.initialized) return;
+    
+    try {
+      // Try to get config from the current domain
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : API_BASE_URL;
+      const configResponse = await fetch(`${currentOrigin}/api/config`);
+      
+      if (configResponse.ok) {
+        const config = await configResponse.json();
+        API_BASE_URL = config.api_url;
+        this.initialized = true;
+      }
+    } catch (error) {
+      console.warn('Failed to fetch config, using default API URL:', error);
+      // Keep using the default API_BASE_URL
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Initialize config if not already done
+    await this.initializeConfig();
+    
     const url = `${API_BASE_URL}${endpoint}`;
     const token = this.getToken();
 
@@ -217,6 +273,44 @@ class ApiService {
     
     this.setToken(response.token);
     return response;
+  }
+
+  // OIDC Authentication
+  async getOIDCLoginURL(inviteCode?: string): Promise<string> {
+    // Initialize config if not already done
+    await this.initializeConfig();
+    
+    const url = new URL('/api/auth/oidc/login', API_BASE_URL);
+    if (inviteCode) {
+      url.searchParams.set('invite_code', inviteCode);
+    }
+    return url.toString();
+  }
+
+  async oidcCallback(code: string, state: string): Promise<LoginResponse> {
+    const url = new URL('/api/auth/oidc/callback', API_BASE_URL);
+    url.searchParams.set('code', code);
+    url.searchParams.set('state', state);
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'OIDC callback failed');
+    }
+    
+    const data = await response.json();
+    this.setToken(data.token);
+    return data;
+  }
+
+  async oidcLogout(): Promise<void> {
+    await this.request('/api/auth/oidc/logout', {
+      method: 'POST',
+    });
   }
 
   // Labs
@@ -384,9 +478,9 @@ class ApiService {
   // Simplified cleanup by lab UUID only - auto-constructs all resource names
   async cleanupByLab(labId: string): Promise<{
     message: string;
-    lab_id: string;
-    results: Record<string, string>;
-    errors: Record<string, string>;
+    lab_ids: string[];
+    results: Record<string, Record<string, string>>;
+    errors: Record<string, Record<string, string>>;
     successful: number;
     failed: number;
   }> {
@@ -401,8 +495,11 @@ class ApiService {
     message: string;
     service_config_id: string;
     service_type: string;
-    lab_id: string;
-    auto_constructed_resources: Record<string, string>;
+    lab_ids: string[];
+    results: Record<string, { message: string; auto_constructed_resources: Record<string, string> }>;
+    errors: Record<string, string>;
+    successful: number;
+    failed: number;
   }> {
     return this.request('/api/admin/cleanup/service-by-id', {
       method: 'POST',
@@ -418,6 +515,22 @@ class ApiService {
   // Admin endpoints
   async getAllLabs(): Promise<LabResponse[]> {
     return this.request<LabResponse[]>('/api/admin/labs');
+  }
+
+  async getPendingLabs(): Promise<LabResponse[]> {
+    return this.request<LabResponse[]>('/api/admin/labs/pending');
+  }
+
+  async approveLab(labId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/admin/labs/${labId}/approve`, {
+      method: 'POST',
+    });
+  }
+
+  async rejectLab(labId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/admin/labs/${labId}/reject`, {
+      method: 'POST',
+    });
   }
 
 
@@ -516,11 +629,26 @@ class ApiService {
     });
   }
 
-  async createInvite(organizationId: string, data: { email: string; role: string }): Promise<Invite> {
+  async createInvite(organizationId: string, data: CreateInviteRequest): Promise<Invite> {
     return this.request<Invite>(`/api/admin/organizations/${organizationId}/invites`, {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  // Get all invites across all organizations (admin)
+  async getAllInvites(): Promise<Invite[]> {
+    return this.request<Invite[]>('/api/admin/invites');
+  }
+
+  // Get invite usage statistics (admin)
+  async getInviteUsageStats(): Promise<InviteUsageStats[]> {
+    return this.request<InviteUsageStats[]>('/api/admin/invites/usage');
+  }
+
+  // Get invites for a specific organization (admin)
+  async getOrganizationInvites(organizationId: string): Promise<Invite[]> {
+    return this.request<Invite[]>(`/api/admin/organizations/${organizationId}/invites`);
   }
 
   // Get user's organization

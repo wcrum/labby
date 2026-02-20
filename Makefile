@@ -80,12 +80,71 @@ clean: ## Clean all build artifacts
 
 # Docker Compose
 .PHONY: up
-up: ## Start with docker-compose
+up: ## Start all services with docker-compose
+	@echo "Starting all services..."
+	docker-compose up -d
+	@echo "All services started successfully!"
+	@echo "Services available at:"
+	@echo "  - Main App: http://localhost:8080"
+	@echo "  - Dex OIDC: http://localhost:5556"
+	@echo "  - pgAdmin: http://localhost:8081"
+	@echo "  - PostgreSQL: localhost:5432"
+
+.PHONY: up-logs
+up-logs: ## Start all services with logs
+	@echo "Starting all services with logs..."
 	docker-compose up
 
 .PHONY: down
-down: ## Stop docker-compose
+down: ## Stop all services
+	@echo "Stopping all services..."
 	docker-compose down
+	@echo "All services stopped!"
+
+.PHONY: down-volumes
+down-volumes: ## Stop all services and delete volumes
+	@echo "Stopping all services and deleting volumes..."
+	docker-compose down -v
+	@echo "All services stopped and volumes deleted!"
+
+.PHONY: logs
+logs: ## Show logs for all services
+	docker-compose logs -f
+
+.PHONY: logs-app
+logs-app: ## Show logs for main application
+	docker-compose logs -f spectro-lab
+
+.PHONY: logs-db
+logs-db: ## Show logs for database
+	docker-compose logs -f postgres
+
+.PHONY: logs-dex
+logs-dex: ## Show logs for Dex OIDC server
+	docker-compose logs -f dex
+
+.PHONY: dev-with-services
+dev-with-services: up ## Start development environment with all services
+	@echo "Starting development environment with all services..."
+	@echo "Services:"
+	@echo "  - Dex OIDC Server: http://localhost:5556"
+	@echo "  - PostgreSQL Database: localhost:5432"
+	@echo "  - pgAdmin: http://localhost:8081"
+	@echo "  - Backend API: http://localhost:8080"
+	@echo "  - Frontend: http://localhost:3000"
+	@echo ""
+	@echo "Test users (OIDC):"
+	@echo "  - admin@spectrocloud.com / password (admin role)"
+	@echo "  - test@test.com / password (example-org)"
+	@echo ""
+	@echo "Press Ctrl+C to stop all services"
+	@echo ""
+	@trap 'make down' INT TERM; \
+	cd $(BACKEND_DIR) && go run cmd/server/main.go & \
+	BACKEND_PID=$$!; \
+	cd .. && pnpm dev & \
+	FRONTEND_PID=$$!; \
+	wait $$BACKEND_PID $$FRONTEND_PID
 
 # Health check
 .PHONY: health
